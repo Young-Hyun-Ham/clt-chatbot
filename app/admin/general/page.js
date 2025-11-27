@@ -9,12 +9,13 @@ import Link from "next/link";
 export default function GeneralSettingsPage() {
   const {
     maxFavorites,
-    hideCompletedScenarios,
-    hideDelayInHours,
-    fontSizeDefault,
-    fontSizeSmall,
-    isDevMode,
     dimUnfocusedPanels,
+    enableFavorites,
+    showHistoryOnGreeting,
+    mainInputPlaceholder,
+    enableMainChatMarkdown,
+    headerTitle,
+    showScenarioBubbles,
     llmProvider,
     flowiseApiUrl,
     loadGeneralConfig,
@@ -23,16 +24,17 @@ export default function GeneralSettingsPage() {
   } = useChatStore();
 
   const [limit, setLimit] = useState("");
-  const [hideCompleted, setHideCompleted] = useState(false);
-  const [delayHours, setDelayHours] = useState("0");
-  const [defaultSize, setDefaultSize] = useState("");
-  const [smallSize, setSmallSize] = useState("");
-  const [devMode, setDevMode] = useState(false);
   const [dimPanels, setDimPanels] = useState(true);
+  const [favoritesEnabled, setFavoritesEnabled] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
   const [provider, setProvider] = useState("gemini");
   const [apiUrl, setApiUrl] = useState("");
+  const [placeholder, setPlaceholder] = useState("");
+  const [markdownEnabled, setMarkdownEnabled] = useState(true);
+  const [customHeaderTitle, setCustomHeaderTitle] = useState("");
+  const [bubblesVisible, setBubblesVisible] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const [apiUrlError, setApiUrlError] = useState(''); // --- 👈 [추가] URL 오류 상태 ---
+  const [apiUrlError, setApiUrlError] = useState("");
 
   useEffect(() => {
     loadGeneralConfig();
@@ -40,65 +42,63 @@ export default function GeneralSettingsPage() {
 
   useEffect(() => {
     if (maxFavorites !== null) setLimit(String(maxFavorites));
-    setHideCompleted(hideCompletedScenarios);
-    if (hideDelayInHours !== null) setDelayHours(String(hideDelayInHours));
-    if (fontSizeDefault) setDefaultSize(fontSizeDefault);
-    if (fontSizeSmall) setSmallSize(fontSizeSmall);
-    setDevMode(isDevMode);
     setDimPanels(dimUnfocusedPanels);
+    setFavoritesEnabled(enableFavorites);
+    setShowHistory(showHistoryOnGreeting);
     setProvider(llmProvider);
     setApiUrl(flowiseApiUrl);
+    setPlaceholder(mainInputPlaceholder || "");
+    setMarkdownEnabled(enableMainChatMarkdown);
+    setCustomHeaderTitle(headerTitle || "");
+    setBubblesVisible(showScenarioBubbles);
   }, [
     maxFavorites,
-    hideCompletedScenarios,
-    hideDelayInHours,
-    fontSizeDefault,
-    fontSizeSmall,
-    isDevMode,
     dimUnfocusedPanels,
+    enableFavorites,
+    showHistoryOnGreeting,
+    mainInputPlaceholder,
+    enableMainChatMarkdown,
+    headerTitle,
+    showScenarioBubbles,
     llmProvider,
     flowiseApiUrl,
   ]);
 
-  // --- 👇 [수정된 부분 시작]: handleSave에 URL 유효성 검사 추가 ---
   const handleSave = async () => {
     setIsLoading(true);
-    setApiUrlError(''); // 오류 초기화
+    setApiUrlError("");
     const newLimit = parseInt(limit, 10);
-    const newDelayHours = parseInt(delayHours, 10);
 
     // 숫자 유효성 검사
-    if (
-      isNaN(newLimit) ||
-      newLimit < 0 ||
-      isNaN(newDelayHours) ||
-      newDelayHours < 0
-    ) {
+    if (isNaN(newLimit) || newLimit < 0) {
       showEphemeralToast("유효한 숫자를 입력해주세요.", "error");
       setIsLoading(false);
       return;
     }
 
-    // Flowise 선택 시 URL 유효성 검사 (간단하게 http/https 시작 여부만)
     if (provider === "flowise") {
-      if (!apiUrl || !(apiUrl.startsWith('http://') || apiUrl.startsWith('https://'))) {
-          setApiUrlError('유효한 URL 형식(http:// 또는 https://)으로 입력해주세요.');
-          showEphemeralToast("Flowise API URL 형식이 올바르지 않습니다.", "error");
-          setIsLoading(false);
-          return;
+      if (
+        !apiUrl ||
+        !(apiUrl.startsWith("http://") || apiUrl.startsWith("https://"))
+      ) {
+        setApiUrlError("유효한 URL 형식(http:// 또는 https://)으로 입력해주세요.");
+        showEphemeralToast("Flowise API URL 형식이 올바르지 않습니다.", "error");
+        setIsLoading(false);
+        return;
       }
     }
 
     const settings = {
       maxFavorites: newLimit,
-      hideCompletedScenarios: hideCompleted,
-      hideDelayInHours: newDelayHours,
-      fontSizeDefault: defaultSize,
-      fontSizeSmall: smallSize,
-      isDevMode: devMode,
       dimUnfocusedPanels: dimPanels,
+      enableFavorites: favoritesEnabled,
+      showHistoryOnGreeting: showHistory,
+      mainInputPlaceholder: placeholder,
+      enableMainChatMarkdown: markdownEnabled,
+      headerTitle: customHeaderTitle,
+      showScenarioBubbles: bubblesVisible,
       llmProvider: provider,
-      flowiseApiUrl: apiUrl, // 저장 시에는 입력된 값 그대로 저장
+      flowiseApiUrl: apiUrl,
     };
 
     const success = await saveGeneralConfig(settings);
@@ -106,11 +106,9 @@ export default function GeneralSettingsPage() {
       showEphemeralToast("설정이 성공적으로 저장되었습니다.", "success");
     } else {
       // saveGeneralConfig 내부에서 오류 토스트가 표시될 것임
-      // showEphemeralToast("저장에 실패했습니다.", "error");
     }
     setIsLoading(false);
   };
-  // --- 👆 [수정된 부분 끝] ---
 
   return (
     <div className={styles.container}>
@@ -124,7 +122,7 @@ export default function GeneralSettingsPage() {
 
       <main className={styles.editorContainer}>
         {/* LLM 공급자 설정 (기존 코드 유지) */}
-        <div className={styles.settingGroup}>
+        {/* <div className={styles.settingGroup}>
           <div className={styles.settingItem}>
             <label className={styles.settingLabel}>
               <h3>LLM 공급자</h3>
@@ -136,7 +134,10 @@ export default function GeneralSettingsPage() {
                   type="radio"
                   value="gemini"
                   checked={provider === "gemini"}
-                  onChange={(e) => { setProvider(e.target.value); setApiUrlError(''); }} // Provider 변경 시 오류 초기화
+                  onChange={(e) => {
+                    setProvider(e.target.value);
+                    setApiUrlError("");
+                  }}
                 />
                 Gemini
               </label>
@@ -156,25 +157,144 @@ export default function GeneralSettingsPage() {
               <label htmlFor="flowise-url" className={styles.settingLabel}>
                 <h4>Flowise API URL</h4>
                 <p>사용할 Flowise 챗플로우의 API Endpoint URL을 입력합니다.</p>
-                {/* --- 👇 [추가] 오류 메시지 표시 --- */}
-                {apiUrlError && <p style={{ color: 'red', fontSize: '0.8rem', marginTop: '4px' }}>{apiUrlError}</p>}
-                {/* --- 👆 [추가] --- */}
+                {apiUrlError && (
+                  <p
+                    style={{
+                      color: "red",
+                      fontSize: "0.8rem",
+                      marginTop: "4px",
+                    }}
+                  >
+                    {apiUrlError}
+                  </p>
+                )}
               </label>
               <input
                 id="flowise-url"
                 type="text"
                 value={apiUrl}
-                onChange={(e) => { setApiUrl(e.target.value); setApiUrlError(''); }} // 입력 시 오류 초기화
+                onChange={(e) => {
+                  setApiUrl(e.target.value);
+                  setApiUrlError("");
+                }}
                 className={styles.settingInput}
-                style={{ width: "100%", textAlign: "left", borderColor: apiUrlError ? 'red' : undefined }} // 오류 시 테두리 색 변경
+                style={{
+                  width: "100%",
+                  textAlign: "left",
+                  borderColor: apiUrlError ? "red" : undefined,
+                }}
                 placeholder="http://..."
               />
             </div>
           )}
+        </div> */}
+
+        <div className={styles.settingItem}>
+          <label htmlFor="header-title" className={styles.settingLabel}>
+            <h3>헤더 타이틀</h3>
+            <p>
+              상단 헤더에 표시될 서비스 이름을 설정합니다. (기본값: AI Chatbot)
+            </p>
+          </label>
+          <input
+            id="header-title"
+            type="text"
+            value={customHeaderTitle}
+            onChange={(e) => setCustomHeaderTitle(e.target.value)}
+            className={styles.settingInput}
+            style={{
+              width: "100%",
+              textAlign: "left",
+              maxWidth: "400px",
+            }}
+            placeholder="예: CLT 챗봇"
+          />
         </div>
 
-        {/* 포커스 흐림 설정 (기존 코드 유지) */}
+        {/* 메인 입력창 플레이스홀더 */}
         <div className={styles.settingItem}>
+          <label htmlFor="main-placeholder" className={styles.settingLabel}>
+            <h3>메인 입력창 문구</h3>
+            <p>
+              채팅 하단의 메인 입력창에 표시될 플레이스홀더 텍스트입니다. (기본값:
+              askAboutService)
+            </p>
+          </label>
+          <input
+            id="main-placeholder"
+            type="text"
+            value={placeholder}
+            onChange={(e) => setPlaceholder(e.target.value)}
+            className={styles.settingInput}
+            style={{
+              width: "100%",
+              textAlign: "left",
+              maxWidth: "400px",
+            }}
+            placeholder="예: 서비스에 대해 질문해주세요."
+          />
+        </div>
+
+        {/* --- 👇 [추가] 시나리오 버블 표시 설정 --- */}
+        <div className={styles.settingItem}>
+          <label className={styles.settingLabel}>
+            <h3>시나리오 버블 표시</h3>
+            <p>
+              활성화 시, 시나리오가 시작될 때 메인 채팅창에 해당 시나리오로
+              이동하는 버블을 표시합니다.
+            </p>
+          </label>
+          <label className={styles.switch}>
+            <input
+              type="checkbox"
+              checked={bubblesVisible}
+              onChange={(e) => setBubblesVisible(e.target.checked)}
+            />
+            <span className={styles.slider}></span>
+          </label>
+        </div>
+        {/* --- 👆 [추가] --- */}
+
+        {/* 메인 챗 마크다운 설정 */}
+        <div className={styles.settingItem}>
+          <label className={styles.settingLabel}>
+            <h3>메인 챗 마크다운</h3>
+            <p>
+              활성화 시, 메인 채팅(좌측)의 봇 답변에 마크다운 서식을
+              적용합니다.
+            </p>
+          </label>
+          <label className={styles.switch}>
+            <input
+              type="checkbox"
+              checked={markdownEnabled}
+              onChange={(e) => setMarkdownEnabled(e.target.checked)}
+            />
+            <span className={styles.slider}></span>
+          </label>
+        </div>
+
+        {/* 즐겨찾기 기능 설정 */}
+        {/* <div className={styles.settingItem}>
+          <label className={styles.settingLabel}>
+            <h3>즐겨찾기 기능</h3>
+            <p>
+              활성화 시, 숏컷 메뉴의 즐겨찾기(별) 아이콘과 메인 화면의 즐겨찾기
+              패널을 활성화합니다.
+            </p>
+          </label>
+          <label className={styles.switch}>
+            <input
+              type="checkbox"
+              checked={favoritesEnabled}
+              onChange={(e) => setFavoritesEnabled(e.target.checked)}
+            />
+            <span className={styles.slider}></span>
+          </label>
+        </div> */}
+
+        {/* 포커스 흐림 설정 */}
+        {/* <div className={styles.settingItem}>
           <label className={styles.settingLabel}>
             <h3>포커스 잃은 창 흐리게</h3>
             <p>
@@ -190,29 +310,29 @@ export default function GeneralSettingsPage() {
             />
             <span className={styles.slider}></span>
           </label>
-        </div>
+        </div> */}
 
-        {/* 개발자 모드 설정 (기존 코드 유지) */}
-        <div className={styles.settingItem}>
+        {/* 초기 화면 히스토리 패널 표시 */}
+        {/* <div className={styles.settingItem}>
           <label className={styles.settingLabel}>
-            <h3>개발자 모드</h3>
+            <h3>초기 화면 히스토리 표시</h3>
             <p>
-              활성화 시, 채팅 화면 우측 하단에 현재 추출된 변수(Slots) 상태를
-              표시합니다.
+              활성화 시, 채팅 시작 전 초기 화면(Greeting)에서도 히스토리
+              패널(사이드바)을 표시합니다.
             </p>
           </label>
           <label className={styles.switch}>
             <input
               type="checkbox"
-              checked={devMode}
-              onChange={(e) => setDevMode(e.target.checked)}
+              checked={showHistory}
+              onChange={(e) => setShowHistory(e.target.checked)}
             />
             <span className={styles.slider}></span>
           </label>
-        </div>
+        </div> */}
 
         {/* 즐겨찾기 개수 설정 (기존 코드 유지) */}
-        <div className={styles.settingItem}>
+        {/* <div className={styles.settingItem}>
           <label htmlFor="max-favorites" className={styles.settingLabel}>
             <h3>최대 즐겨찾기 개수</h3>
             <p>
@@ -227,86 +347,7 @@ export default function GeneralSettingsPage() {
             className={styles.settingInput}
             min="0"
           />
-        </div>
-
-        {/* 완료된 시나리오 숨김 설정 (기존 코드 유지) */}
-        <div
-          className={`${styles.settingGroup} ${
-            hideCompleted ? styles.active : ""
-          }`}
-        >
-          <div className={styles.settingItem}>
-            <label className={styles.settingLabel}>
-              <h3>완료된 시나리오 숨김</h3>
-              <p>
-                대화 목록의 하위 메뉴에서 '완료' 상태인 시나리오를 숨깁니다.
-              </p>
-            </label>
-            <label className={styles.switch}>
-              <input
-                type="checkbox"
-                checked={hideCompleted}
-                onChange={(e) => setHideCompleted(e.target.checked)}
-              />
-              <span className={styles.slider}></span>
-            </label>
-          </div>
-          {hideCompleted && (
-            <div className={`${styles.settingItem} ${styles.subSettingItem}`}>
-              <label htmlFor="hide-delay" className={styles.settingLabel}>
-                <h4>숨김 지연 시간 (시간)</h4>
-                <p>
-                  완료된 시점을 기준으로, 설정된 시간 이후에 목록에서 숨깁니다.
-                  (0으로 설정 시 즉시 숨김)
-                </p>
-              </label>
-              <input
-                id="hide-delay"
-                type="number"
-                value={delayHours}
-                onChange={(e) => setDelayHours(e.target.value)}
-                className={styles.settingInput}
-                min="0"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* 폰트 크기 설정 (기존 코드 유지) */}
-        <div className={styles.settingGroup}>
-          <div className={styles.settingItem}>
-            <label htmlFor="font-size-default" className={styles.settingLabel}>
-              <h3>기본 폰트 크기</h3>
-              <p>
-                'Large text' 모드가 ON일 때 적용될 폰트 크기입니다. (예: 16px,
-                1rem)
-              </p>
-            </label>
-            <input
-              id="font-size-default"
-              type="text"
-              value={defaultSize}
-              onChange={(e) => setDefaultSize(e.target.value)}
-              className={styles.settingInput}
-            />
-          </div>
-          <div className={styles.settingItem}>
-            <label htmlFor="font-size-small" className={styles.settingLabel}>
-              <h3>축소 폰트 크기</h3>
-              <p>
-                'Large text' 모드가 OFF일 때 적용될 폰트 크기입니다. (예: 14px,
-                0.9rem)
-              </p>
-            </label>
-            <input
-              id="font-size-small"
-              type="text"
-              value={smallSize}
-              onChange={(e) => setSmallSize(e.target.value)}
-              className={styles.settingInput}
-            />
-          </div>
-        </div>
+        </div> */}
 
         {/* 저장 버튼 (기존 코드 유지) */}
         <button

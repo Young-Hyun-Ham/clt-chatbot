@@ -2,6 +2,7 @@
 
 'use client';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, where, limit } from 'firebase/firestore';
+import { openLinkThroughParent } from '../../lib/parentMessaging';
 
 export const createNotificationSlice = (set, get) => ({
   // State
@@ -14,7 +15,7 @@ export const createNotificationSlice = (set, get) => ({
   unsubscribeNotifications: null,
   hasUnreadNotifications: false,
   unreadScenarioSessions: new Set(),
-  unreadConversations: new Set(), // --- 👈 [추가]
+  unreadConversations: new Set(),
   unsubscribeUnreadStatus: null,
   unsubscribeUnreadScenarioNotifications: null,
 
@@ -92,7 +93,6 @@ export const createNotificationSlice = (set, get) => ({
     set({ unsubscribeUnreadStatus: unsubscribe });
   },
 
-  // --- 👇 [수정된 부분] ---
   subscribeToUnreadScenarioNotifications: (userId) => {
     const q = query(
       collection(get().db, "users", userId, "notifications"),
@@ -119,7 +119,6 @@ export const createNotificationSlice = (set, get) => ({
     });
     set({ unsubscribeUnreadScenarioNotifications: unsubscribe });
   },
-  // --- 👆 [여기까지] ---
 
   markNotificationAsRead: async (notificationId) => {
     const user = get().user;
@@ -133,7 +132,6 @@ export const createNotificationSlice = (set, get) => ({
     }
   },
 
-  // --- 👇 [수정] handleEvents 수정 ---
   handleEvents: (events, scenarioSessionId = null, conversationId = null) => {
       if (!events || !Array.isArray(events)) return;
       events.forEach(event => {
@@ -141,25 +139,20 @@ export const createNotificationSlice = (set, get) => ({
           get().showToast(event.message, event.toastType, scenarioSessionId, conversationId);
         } else if (event.type === 'open_link' && event.url) { // 'open_link' 이벤트 처리 추가
           if (typeof window !== 'undefined') {
-            // window.open(event.url, '_blank', 'noopener,noreferrer');
-            //  --- 👇 [수정] hyh - link slot 새창이 아닌 현재창 링크 변경 ---
-            const PARENT_ORIGIN = "http://localhost:5173"; // "http://172.20.130.91:9110";
-            try {
-              if (!window.parent) throw new Error('not parent window.');
-              const msg = { action: 'callScreenOpen', payload: { url: event.url } };
-              window.parent.postMessage(msg, PARENT_ORIGIN);
-            } catch (err) {
-              console.error('link faild:', err);
-            }
-            // --- 👆 [수정] ---
+            window.open(event.url, '_blank', 'noopener,noreferrer');
             console.log(`[handleEvents] Opened link: ${event.url}`);
           } else {
              console.warn("[handleEvents] Cannot open link: window object not available.");
+             return;
           }
+          const didSend = openLinkThroughParent(event.url);
+          if (!didSend) {
+            console.warn('[handleEvents] Parent window not reachable. Opened link in a new tab.');
+          }
+          console.log(`[handleEvents] Opened link: ${event.url}`);
         }
       });
   },
-  // --- 👆 [수정] ---
 
   openNotificationModal: () => {
     const user = get().user;
@@ -173,4 +166,23 @@ export const createNotificationSlice = (set, get) => ({
     get().unsubscribeNotifications?.();
     set({ isNotificationModalOpen: false, unsubscribeNotifications: null });
   },
+
+  // --- 👇 [추가] index.js에서 이동된 복합 액션 ---
+  handleNotificationNavigation: async (notification) => {
+    // 알림 클릭 시 대화 로드 및 스크롤 처리
+    get().closeNotificationModal(); // uiSlice
+    get().markNotificationAsRead(notification.id); // notificationSlice
+
+    if (notification.conversationId) { // 대화 ID가 있는 경우
+      if (get().currentConversationId !== notification.conversationId) { // conversationSlice 상태 참조
+        await get().loadConversation(notification.conversationId); // conversationSlice 액션 호출
+      }
+      // 시나리오 세션 ID가 있으면 해당 메시지로 스크롤
+      if (notification.scenarioSessionId) {
+        // 약간의 지연 후 스크롤 시도 (대화 로딩 완료 시간 확보)
+        setTimeout(() => { get().setScrollToMessageId(notification.scenarioSessionId); }, 300); // uiSlice 액션 호출
+      }
+    }
+  },
+  // --- 👆 [추가] ---
 });

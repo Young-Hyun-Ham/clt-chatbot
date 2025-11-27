@@ -1,0 +1,144 @@
+/* app/components/MarkdownRenderer.module.css */
+.markdownContent {
+  line-height: 1.6;
+  word-break: keep-all;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.markdownContent h1 {
+  color: var(--Purple-03, #634de2);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+  letter-spacing: -0.14px;
+}
+
+.markdownContent h2 {
+  color: var(--Gray-08, #282166);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: -0.14px;
+}
+
+/* 임시 */
+.markdownContent h3 {
+  color: var(--Purple-03, #634de2);
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: -15px !important; 
+  letter-spacing: -0.14px;
+}
+
+.markdownContent a {
+  color: #4285f4; /* 링크 색상 */
+  /* text-decoration: underline; */
+}
+
+.markdownContent strong {
+  font-weight: 600; /* 굵게 */
+}
+
+.markdownContent em {
+  font-style: normal;
+}
+
+.markdownContent ul {
+  margin-bottom: 0px;
+  margin-top: -10px;
+}
+
+.markdownContent li {
+  margin-bottom: -10px;
+  /* 리스트 번호 붙이기 */
+  /* list-style-type: disc; */
+  margin-left: 20px;
+}
+
+.markdownContent code {
+  font-family: var(--font-geist-mono), monospace;
+  background-color: var(--button-hover-bg); /* 코드 배경 */
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  word-wrap: break-word; /* 코드 줄바꿈 */
+}
+
+/* <br> 태그로 인한 이중 간격 방지 */
+.markdownContent br {
+  content: "";
+  display: block;
+  margin-bottom: 0;
+}
+
+.tableWrapper {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* --- 👇 [수정] --- */
+.markdownContent table {
+  border-collapse: collapse;
+  /* width: max-content; 제거 */
+  width: 100%; /* 100% 너비 강제 */
+  table-layout: fixed; /* 컬럼 너비 균등 배분 */
+  /* min-width: 100%; (width: 100%로 대체) */
+  outline: 1px solid var(--panel-border-color);
+  outline-offset: -1px;
+}
+/* --- 👆 [수정] --- */
+
+.markdownContent table th {
+  background-color: #f4f5fb;
+  padding: 8px 10px;
+  border: 1px solid #d8e0eb;
+  min-width: 50px;
+  max-width: 120px;
+  color: var(--Gray-08, #282166);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: -0.18px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.markdownContent table td {
+  padding: 8px 12px;
+  border: 1px solid #d8e0eb;
+  min-width: 50px;
+  max-width: 120px;
+  color: var(--Gray-08, #282166);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  letter-spacing: -0.18px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.viewMoreButton {
+  background: none;
+  border: none;
+  width: 100%;
+  border: 1px solid #babcd1;
+  border-radius: 8px;
+  color: #5e7599;
+  cursor: pointer;
+  padding: 8px 0;
+  margin-top: 14px;
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.viewMoreButton:hover {
+  background-color: #f0f2f5;
+}

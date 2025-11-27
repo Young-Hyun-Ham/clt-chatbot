@@ -1,3 +1,4 @@
+// app/components/ConversationItem.jsx
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { useTranslations } from "../hooks/useTranslations";
@@ -8,6 +9,26 @@ import ArrowDropDownIcon from "./icons/ArrowDropDownIcon";
 import PinOutlinedIcon from "./icons/PinOutlinedIcon";
 import CloseIcon from "./icons/CloseIcon";
 import { useChatStore } from "../store";
+// --- 👇 [추가] ScenarioStatusBadge 임포트 ---
+import ScenarioStatusBadge from "./ScenarioStatusBadge";
+// --- 👆 [추가] ---
+
+// --- 👇 [추가] 완료 뱃지 아이콘 (기존 정의 유지) ---
+const DoneBadgeIcon = () => (
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 16 16"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M8 1.5C4.41015 1.5 1.5 4.41015 1.5 8C1.5 11.5899 4.41015 14.5 8 14.5C11.5899 14.5 14.5 11.5899 14.5 8C14.5 4.41015 11.5899 1.5 8 1.5ZM6.8 11L4 8.2L4.9 7.3L6.8 9.2L11.1 4.9L12 5.8L6.8 11Z"
+      fill="currentColor"
+    />
+  </svg>
+);
+// --- 👆 [추가] ---
 
 const CheckIcon = () => (
   <svg
@@ -57,55 +78,9 @@ const TrashIcon = () => (
   </svg>
 );
 
-// --- 👇 [수정된 부분 시작] ---
-const ScenarioStatusBadge = ({ status, t, isSelected }) => {
-  // isSelected가 true이면 'selected' 상태를 우선 표시
-  if (isSelected) {
-    return (
-      <span className={`${styles.scenarioBadge} ${styles.selected}`}>
-        {t("statusSelected")}
-      </span>
-    );
-  }
-
-  // isSelected가 false이면 기존 status 로직 수행
-  if (!status) return null;
-
-  let text;
-  let statusClass;
-
-  switch (status) {
-    case "completed":
-      text = t("statusCompleted");
-      statusClass = "done";
-      break;
-    case "active":
-      text = t("statusActive");
-      statusClass = "incomplete";
-      break;
-    case "failed":
-      text = t("statusFailed");
-      statusClass = "failed";
-      break;
-    case "generating":
-      text = t("statusGenerating");
-      statusClass = "generating";
-      break;
-    case "canceled":
-      text = t("statusCanceled");
-      statusClass = "canceled";
-      break;
-    default:
-      return null;
-  }
-
-  return (
-    <span className={`${styles.scenarioBadge} ${styles[statusClass]}`}>
-      {text}
-    </span>
-  );
-};
-// --- 👆 [수정된 부분 끝] ---
+// --- 👇 [제거] ScenarioStatusBadge (ScenarioStatusBadge.jsx로 이동) ---
+// const ScenarioStatusBadge = ({ ... }) => { ... };
+// --- 👆 [제거] ---
 
 export default function ConversationItem({
   convo,
@@ -120,6 +95,8 @@ export default function ConversationItem({
   onScenarioClick,
   unreadScenarioSessions,
   hasUnreadScenarios,
+  isPending,
+  hasCompletedResponse,
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -212,9 +189,28 @@ export default function ConversationItem({
         }}
       >
         <div className={styles.convoMain}>
+          {isPending && !isEditing && (
+            <span className={styles.loadingIndicator}>
+              <img
+                src="/images/Loading.gif"
+                alt="Loading..."
+                width="16"
+                height="16"
+                style={{ display: "block" }}
+              />
+            </span>
+          )}
+
+          {!isPending && hasCompletedResponse && !isEditing && (
+            <span className={styles.doneIndicator}>
+              <DoneBadgeIcon />
+            </span>
+          )}
+
           {hasUnreadScenarios && !isEditing && (
             <div className={styles.unreadDot}></div>
           )}
+          
           {convo.pinned && !isEditing && (
             <span className={styles.pinIndicator}>
               <PinIcon />
@@ -308,11 +304,13 @@ export default function ConversationItem({
                     <span className={styles.scenarioTitle}>
                       {scenario.scenarioId}
                     </span>
+                    {/* --- 👇 [수정] 컴포넌트 사용 --- */}
                     <ScenarioStatusBadge
                       status={scenario.status}
                       t={t}
-                      // isSelected={isSelected}
+                      isSelected={isSelected} // isSelected prop 전달
                     />
+                    {/* --- 👆 [수정] --- */}
                   </div>
                 );
               })

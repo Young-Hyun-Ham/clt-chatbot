@@ -1,8 +1,12 @@
 // app/store/slices/uiSlice.js
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { locales } from "../../lib/locales";
-
-const PARENT_ORIGIN = "http://172.20.130.91:9110/";
+import {
+  postToParent,
+  PARENT_ORIGIN,
+  SCENARIO_PANEL_WIDTH,
+  delayParentAnimationIfNeeded,
+} from "../../lib/parentMessaging";
 
 const getInitialMessages = (lang = "ko") => {
   return [
@@ -18,10 +22,22 @@ export const createUISlice = (set, get) => ({
   maxFavorites: 10,
   hideCompletedScenarios: false,
   hideDelayInHours: 0,
+  contentTruncateLimit: 10, // 봇 답변 줄임 줄 수 (기본값 10)
   fontSizeDefault: "16px", // 기본값
-  fontSizeSmall: "14px", // 기본값
   isDevMode: false,
+  // --- 👇 [추가] 텍스트 숏컷 즉시 전송 설정 (기본값: false) ---
+  sendTextShortcutImmediately: false,
+  // --- 👆 [추가] ---
   dimUnfocusedPanels: true,
+  enableFavorites: true, // 즐겨찾기 기능 활성화 여부 (기본값 true)
+  showHistoryOnGreeting: false, // 초기 화면 히스토리 표시 여부
+  mainInputPlaceholder: "", // 메인 입력창 플레이스홀더
+  // --- 👇 [추가] 헤더 타이틀 설정 ---
+  headerTitle: "AI Chatbot", // 기본값
+  // --- 👆 [추가] ---
+  enableMainChatMarkdown: true, // 메인 챗 마크다운 활성화 여부
+  mainInputValue: "", // 메인 입력창의 제어되는 값
+  showScenarioBubbles: true, // 시나리오 버블 표시 여부 (기본값 true)
   llmProvider: "gemini",
   flowiseApiUrl: "",
   isProfileModalOpen: false,
@@ -42,9 +58,7 @@ export const createUISlice = (set, get) => ({
     confirmVariant: "default",
   },
   activePanel: "main",
-  // --- 👇 [수정된 부분 시작] ---
-  lastFocusedScenarioSessionId: null, // 마지막 포커스된 시나리오 ID 추가
-  // --- 👆 [수정된 부분 끝] ---
+  lastFocusedScenarioSessionId: null,
   focusRequest: 0,
   shortcutMenuOpen: null,
   ephemeralToast: {
@@ -55,14 +69,12 @@ export const createUISlice = (set, get) => ({
   scrollToMessageId: null,
   forceScrollToBottom: false,
   scrollAmount: 0,
-  // --- 👇 [삭제] selectedRow 제거 ---
-  // selectedRow: null,
+  isInitializing: false,
 
   // Actions
-  // --- 👇 [삭제] setSelectedRow 제거 ---
-  // setSelectedRow: (rowData) => set({ selectedRow: rowData }),
+  setIsInitializing: (value) => set({ isInitializing: value }),
+  setMainInputValue: (value) => set({ mainInputValue: value }),
 
-  // --- 기존 코드 생략 ---
   loadGeneralConfig: async () => {
     try {
       const configRef = doc(get().db, "config", "general");
@@ -72,21 +84,29 @@ export const createUISlice = (set, get) => ({
         set({
           maxFavorites:
             typeof config.maxFavorites === "number" ? config.maxFavorites : 10,
-          hideCompletedScenarios:
-            typeof config.hideCompletedScenarios === "boolean"
-              ? config.hideCompletedScenarios
-              : false,
-          hideDelayInHours:
-            typeof config.hideDelayInHours === "number"
-              ? config.hideDelayInHours
-              : 0,
-          fontSizeDefault: config.fontSizeDefault || "16px",
-          fontSizeSmall: config.fontSizeSmall || "14px",
-          isDevMode:
-            typeof config.isDevMode === "boolean" ? config.isDevMode : false,
           dimUnfocusedPanels:
             typeof config.dimUnfocusedPanels === "boolean"
               ? config.dimUnfocusedPanels
+              : true,
+          enableFavorites:
+            typeof config.enableFavorites === "boolean"
+              ? config.enableFavorites
+              : true,
+          showHistoryOnGreeting:
+            typeof config.showHistoryOnGreeting === "boolean"
+              ? config.showHistoryOnGreeting
+              : false,
+          mainInputPlaceholder: config.mainInputPlaceholder || "",
+          // --- 👇 [추가] 헤더 타이틀 로드 ---
+          headerTitle: config.headerTitle || "AI Chatbot",
+          // --- 👆 [추가] ---
+          enableMainChatMarkdown:
+            typeof config.enableMainChatMarkdown === "boolean"
+              ? config.enableMainChatMarkdown
+              : true,
+          showScenarioBubbles:
+            typeof config.showScenarioBubbles === "boolean"
+              ? config.showScenarioBubbles
               : true,
           llmProvider: config.llmProvider || "gemini",
           flowiseApiUrl: config.flowiseApiUrl || "",
@@ -105,6 +125,38 @@ export const createUISlice = (set, get) => ({
       return true;
     } catch (error) {
       console.error("Error saving general config to Firestore:", error);
+      return false;
+    }
+  },
+
+  savePersonalSettings: async (settings) => {
+    const { user, db, showEphemeralToast, language } = get();
+    if (!user) return false;
+
+    // 롤백을 위한 이전 설정 백업
+    const previousSettings = {};
+    Object.keys(settings).forEach((key) => {
+      if (get()[key] !== undefined) {
+        previousSettings[key] = get()[key];
+      }
+    });
+
+    try {
+      set(settings); // 1. 낙관적 업데이트 (UI 즉시 반영)
+
+      const userSettingsRef = doc(db, "settings", user.uid);
+      await setDoc(userSettingsRef, settings, { merge: true }); // 2. Firestore 저장
+      return true;
+    } catch (error) {
+      console.error("Error saving personal settings:", error);
+      const errorMsg =
+        locales[language]?.errorUnexpected || "Failed to save settings.";
+      showEphemeralToast(errorMsg, "error");
+
+      // 저장 실패 시 롤백
+      console.log("Rolling back settings due to error...", previousSettings);
+      set(previousSettings);
+      
       return false;
     }
   },
@@ -132,25 +184,14 @@ export const createUISlice = (set, get) => ({
   },
 
   setTheme: async (newTheme) => {
-    if (get().theme === newTheme) return;
-    set({ theme: newTheme });
+    set({ theme: "light" });
     if (typeof window !== "undefined") {
-      localStorage.setItem("theme", newTheme);
-    }
-    const user = get().user;
-    if (user) {
-      try {
-        const userSettingsRef = doc(get().db, "settings", user.uid);
-        await setDoc(userSettingsRef, { theme: newTheme }, { merge: true });
-      } catch (error) {
-        console.error("Error saving theme to Firestore:", error);
-      }
+      localStorage.setItem("theme", "light");
     }
   },
 
   toggleTheme: async () => {
-    const newTheme = get().theme === "light" ? "dark" : "light";
-    await get().setTheme(newTheme);
+    console.log("Theme toggling is disabled.");
   },
 
   setFontSize: async (size) => {
@@ -212,59 +253,69 @@ export const createUISlice = (set, get) => ({
       confirmModal: { ...state.confirmModal, isOpen: false },
     })),
 
-  toggleHistoryPanel: () => {
-    set((state) => ({ isHistoryPanelOpen: !state.isHistoryPanelOpen }));
-    const { isHistoryPanelOpen } = get();
-
-    if (isHistoryPanelOpen) {
-      console.log("calling history panel close");
-      window.parent.postMessage(
-        {
-          action: "callChatbotResize",
-          payload: {
-            width: -264,
-          },
-        },
-        PARENT_ORIGIN
-      );
-    } else {
-      console.log("calling history panel open");
-      window.parent.postMessage(
-        {
-          action: "callChatbotResize",
-          payload: {
-            width: 264,
-          },
-        },
-        PARENT_ORIGIN
-      );
-    }
+  toggleHistoryPanel: async () => {
+    const isCurrentlyOpen = get().isHistoryPanelOpen;
+    const willBeOpen = !isCurrentlyOpen;
+    const width = willBeOpen ? 264 : -264;
+    console.log(
+      `[Call Window Method] callChatbotResize(width: ${width}) to ${PARENT_ORIGIN} with ${
+        willBeOpen ? "Open" : "Close"
+      } History Panel`
+    );
+    postToParent("callChatbotResize", { width });
+    await delayParentAnimationIfNeeded();
+    set({ isHistoryPanelOpen: willBeOpen });
   },
 
-  toggleScenarioPanelExpanded: () => {
+  openHistoryPanel: async () => {
+    if (get().isHistoryPanelOpen) return;
+    const width = 264;
+    console.log(
+      `[Call Window Method] callChatbotResize(width: ${width}) to ${PARENT_ORIGIN} with Open History Panel`
+    );
+    postToParent("callChatbotResize", { width });
+    await delayParentAnimationIfNeeded();
+    set({ isHistoryPanelOpen: true });
+  },
+
+  closeHistoryPanel: async () => {
+    if (!get().isHistoryPanelOpen) return;
+    const width = -264;
+    console.log(
+      `[Call Window Method] callChatbotResize(width: ${width}) to ${PARENT_ORIGIN} with Close History Panel`
+    );
+    postToParent("callChatbotResize", { width });
+    await delayParentAnimationIfNeeded();
+    set({ isHistoryPanelOpen: false });
+  },
+
+  toggleScenarioPanelExpanded: async () => {
     if (get().activePanel !== "scenario") return;
     const wasExpanded = get().isScenarioPanelExpanded;
-    const widthDelta = wasExpanded ? -280 : 280;
-    window.parent.postMessage(
-      {
-        action: "callChatbotResize",
-        payload: {
-          width: widthDelta,
-        },
-      },
-      PARENT_ORIGIN
+    const willBeExpanded = !wasExpanded;
+    const widthDelta = willBeExpanded ? 280 : -280;
+    console.log(
+      `[Call Window Method] callChatbotResize(width: ${widthDelta}) to ${PARENT_ORIGIN} with Toggle Scenario Panel Expanded`
     );
-    set({ isScenarioPanelExpanded: !wasExpanded });
+    postToParent("callChatbotResize", { width: widthDelta });
+    await delayParentAnimationIfNeeded();
+    set({ isScenarioPanelExpanded: willBeExpanded });
   },
 
   resetScenarioPanelExpansion: () => set({ isScenarioPanelExpanded: false }),
 
-  // --- 👇 [수정된 부분 시작]: setActivePanel 수정 ---
-  setActivePanel: (panel, sessionId = null) => {
-    const wasScenarioPanelActive = get().activePanel === "scenario";
+  setActivePanel: async (panel, sessionId = null) => {
+    const previousActivePanel = get().activePanel;
+    const wasScenarioPanelActive = previousActivePanel === "scenario";
     const wasExpanded = get().isScenarioPanelExpanded;
     if (panel === "scenario") {
-      // 시나리오 패널 활성화 시, active 및 lastFocused 모두 업데이트
+      if (!wasScenarioPanelActive) {
+        console.log(
+          `[Call Window Method] callChatbotResize(width: ${SCENARIO_PANEL_WIDTH}) to ${PARENT_ORIGIN} with Activate Scenario Panel`
+        );
+        postToParent("callChatbotResize", { width: SCENARIO_PANEL_WIDTH });
+        await delayParentAnimationIfNeeded();
+      }
       set({
         activePanel: panel,
         activeScenarioSessionId: sessionId,
@@ -272,7 +323,6 @@ export const createUISlice = (set, get) => ({
         isScenarioPanelExpanded: wasScenarioPanelActive ? wasExpanded : false,
       });
     } else {
-      // 메인 패널 활성화 시, active만 업데이트하고 lastFocused는 유지
       set({
         activePanel: "main",
         activeScenarioSessionId: null,
@@ -281,8 +331,67 @@ export const createUISlice = (set, get) => ({
     }
     get().focusChatInput();
   },
-  // --- 👆 [수정된 부분 끝] ---
 
   focusChatInput: () =>
     set((state) => ({ focusRequest: state.focusRequest + 1 })),
+  
+  // clearUserAndData는 authSlice로 이동했지만, uiSlice 필드를 여기서 초기화해야 함
+  clearUserAndData: () => {
+    set({
+      theme: "light",
+      fontSize: "default",
+      language: "ko",
+      maxFavorites: 10,
+      hideCompletedScenarios: false,
+      hideDelayInHours: 0,
+      contentTruncateLimit: 10,
+      fontSizeDefault: "16px",
+      isDevMode: false,
+      // --- 👇 [추가] ---
+      sendTextShortcutImmediately: false,
+      // --- 👆 [추가] ---
+      dimUnfocusedPanels: true,
+      enableFavorites: true,
+      showHistoryOnGreeting: false,
+      mainInputPlaceholder: "",
+      // --- 👇 [추가] ---
+      headerTitle: "AI Chatbot", 
+      // --- 👆 [추가] ---
+      enableMainChatMarkdown: true,
+      showScenarioBubbles: true,
+      mainInputValue: "",
+      llmProvider: "gemini",
+      flowiseApiUrl: "",
+      isProfileModalOpen: false,
+      isSearchModalOpen: false,
+      isScenarioModalOpen: false,
+      isDevBoardModalOpen: false,
+      isNotificationModalOpen: false,
+      isManualModalOpen: false,
+      isHistoryPanelOpen: false,
+      isScenarioPanelExpanded: false,
+      confirmModal: {
+        isOpen: false,
+        title: "",
+        message: "",
+        confirmText: "Confirm",
+        cancelText: "Cancel",
+        onConfirm: () => {},
+        confirmVariant: "default",
+      },
+      activePanel: "main",
+      lastFocusedScenarioSessionId: null,
+      focusRequest: 0,
+      shortcutMenuOpen: null,
+      ephemeralToast: {
+        visible: false,
+        message: "",
+        type: "info",
+      },
+      scrollToMessageId: null,
+      forceScrollToBottom: false,
+      scrollAmount: 0,
+      isInitializing: false,
+    });
+  },
 });

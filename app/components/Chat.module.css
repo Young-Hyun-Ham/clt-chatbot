@@ -10,7 +10,6 @@
 }
 
 .header {
-  padding: 10px 15px;
   background-color: transparent;
   display: flex;
   justify-content: flex-end;
@@ -270,7 +269,7 @@ input:checked + .slider:before {
 .message {
   border-radius: 16px;
   width: fit-content;
-  max-width: 70%;
+  max-width: 100%;
   word-wrap: break-word;
   line-height: 1.4;
   white-space: pre-wrap;
@@ -279,17 +278,33 @@ input:checked + .slider:before {
   position: relative;
 }
 
+/* --- 👇 [추가] 3단계 너비 클래스 --- */
+/* 30% 너비 */
+.width30 {
+  width: 30%;
+  min-width: 200px; /* 너무 좁아지는 것 방지 */
+  max-width: 30%;
+}
+
+/* 60% 너비 */
+.width60 {
+  width: 60%;
+  max-width: 60%;
+}
+/* --- 👆 [추가] --- */
+
+/* 100% 단계 (90% 너비) */
 .gridMessage,
 .iframeMessage {
-  width: 90%;
-  max-width: 90%;
+  width: 100%;
+  max-width: 100%;
   min-width: 248px;
-  flex: 0 0 90%;
+  flex: 0 0 100%;
   box-sizing: border-box;
 }
 
 .botMessage .messageContentWrapper {
-  padding: 16px 20px;
+  padding: 16px 20px 16px 12px;
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -312,23 +327,29 @@ input:checked + .slider:before {
   margin: 2px 0px;
   line-height: 20px; /* 142.857% */
   letter-spacing: -0.14px;
+  /* max-width: calc(100% - 32px); */
+  max-width: 100%;
+  width: 100%;
 }
 
 .botMessage {
   color: var(--text-color); /* Themed */
   transition: background-color 0.2s;
+  width: 100%;
+  max-width: 100%;
 }
 
 .botMessageRichContent {
-  width: 90%;
-  max-width: 90%;
-  flex: 0 0 90%;
+  width: 100%;
+  max-width: 100%;
+  flex: 0 0 100%;
   min-width: var(--bot-rich-content-min-width, 0);
 }
 
 .botMessageRichContent .messageContentWrapper,
 .botMessageRichContent .messageContent {
   width: 100%;
+  min-width: calc(100% - 100px);
 }
 
 .botMessage svg {
@@ -344,6 +365,7 @@ input:checked + .slider:before {
   gap: 8px;
 }
 
+/* --- 👇 [수정] .actionButton에 color 및 transition 추가 --- */
 .messageActionArea .actionButton {
   background: none;
   border: none;
@@ -353,27 +375,31 @@ input:checked + .slider:before {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s, color 0.2s; /* color transition 추가 */
+  color: #babcd1; /* 아이콘 기본 색상 (하드코딩했던 색상) */
 }
+/* --- 👆 [수정] --- */
 
 .messageActionArea .actionButton svg {
   width: 16px;
   height: 16px;
 }
 
+/* --- 👇 [수정] .actionButton:hover에 color 추가 --- */
 .messageActionArea .actionButton:hover {
   background-color: var(--button-hover-bg);
+  color: var(--action-button-hover-color); /* globals.css에 정의된 hover 색상 */
 }
+/* --- 👆 [수정] --- */
 
 .userMessage {
   padding: 12px 20px;
   color: var(--White, #fff); /* Themed */
   border-top-right-radius: 4px;
   border-radius: var(--2, 16px);
-  background: var(
-    --Color-Light-Gradation-01,
-    linear-gradient(90deg, #8f9aff 0%, #634ce2 100%)
-  );
+  background: #8362E9 !important;
+  box-shadow: 0 6px 16px 0 #DFE2FE;
+  font-size: 14px;
 }
 
 @keyframes fadeInOut {
@@ -493,13 +519,51 @@ input:checked + .slider:before {
   overflow: hidden;
 }
 
-.formContainer h3 {
-  padding: 12px 20px;
+/* --- 👇 [추가] 숨겨진 파일 input 스타일 --- */
+.formFileInput {
+  display: none;
+}
+/* --- 👆 [추가] --- */
+
+/* --- 👇 [수정] 폼 헤더 및 엑셀 버튼 스타일 --- */
+.formHeader {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px; /* h3에서 패딩 이동 */
+  gap: 8px;
+}
+
+.formHeader h3 {
+  padding: 0; /* h3 패딩 리셋 */
+  margin: 0; /* h3 마진 리셋 */
   font-size: 16px;
   font-weight: 600;
   line-height: 20px; /* 125% */
   letter-spacing: -0.24px;
 }
+
+.excelUploadButton {
+  height: 36px;
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--Gray-07, #5e7599);
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-radius: 6px;
+  border: 1px solid var(--Gray-04, #babcd1);
+  background: var(--White-Opacity-48, rgba(255, 255, 255, 0.48));
+}
+
+.excelUploadButton:hover {
+  background-color: var(--button-hover-bg);
+}
+
+.excelUploadButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* --- 👆 [수정] --- */
 
 .formContainerSeparator {
   position: relative;
@@ -519,14 +583,19 @@ input:checked + .slider:before {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  padding: 12px 20px;
+  /* padding: 12px 20px; */
+  width: 100%;
 }
 
+/* --- 👇 [수정] formActionArea에 gap 추가 --- */
 .formActionArea {
   display: flex;
   justify-content: flex-end;
   padding: 0px 20px 12px 20px;
+  gap: 8px; /* 버튼 사이 간격 추가 */
+  align-items: center; /* 버튼 정렬 */
 }
+/* --- 👆 [수정] --- */
 
 .formLabel {
   color: var(--Gray-05, #8d9eba);
@@ -574,17 +643,19 @@ input:checked + .slider:before {
   color-scheme: var(--date-input-scheme);
 }
 
+/* --- 👇 [수정] formSubmitButton에서 align-self 제거 --- */
 .formSubmitButton {
-  align-self: flex-end;
+  /* align-self: flex-end; */ /* 부모(formActionArea)가 정렬을 제어하므로 제거 */
   padding: 8px 16px;
   color: var(--White, #fff); /* Themed */
   border-radius: 8px;
   background: var(
     --Color-Light-Gradation-01,
-    linear-gradient(90deg, #8f9aff 0%, #634ce2 100%)
+    linear-gradient(90deg, #BCA8FF 0%, #6941DF 100%)
   );
   cursor: pointer;
 }
+/* --- 👆 [수정] --- */
 
 .formSubmitButton:hover {
   background-color: var(--login-button-hover-bg); /* Themed */
@@ -596,15 +667,11 @@ input:checked + .slider:before {
   opacity: 0.7;
 }
 
-/* --- 👇 [수정된 부분] max-width, aspect-ratio 제거 --- */
 .iframeContainer {
   padding: 0;
   background-color: transparent;
-  /* max-width: 450px; 제거 */
-  /* aspect-ratio: 16 / 10; 제거 */
   overflow: hidden; /* 추가: 내용이 넘칠 경우 숨김 */
 }
-/* --- 👆 [여기까지] --- */
 
 .iframeContainer iframe {
   display: block; /* 기본 스타일 유지 */
@@ -734,73 +801,30 @@ body.dark .history:hover::-webkit-scrollbar-thumb {
   flex-direction: column;
   width: 496;
   max-width: 496px;
-  /* --- 👇 [수정] 높이 고정 및 max-height 제거 --- */
   height: 48px; /* 헤더 높이와 동일하게 고정 */
-  /* max-height: 500px; 제거 */
-  /* --- 👆 [수정] --- */
   border-radius: 16px;
   overflow: hidden;
-  /* --- 👇 [수정] height 관련 transition 제거 --- */
   transition: opacity 0.4s ease-out, border-color 0.2s ease-out;
-  /* --- 👆 [수정] --- */
   cursor: pointer; /* 클릭 가능하도록 커서 변경 */
 }
 
-/* --- 👇 [삭제] .scenarioBubbleContainer.collapsed 관련 스타일 제거 ---
-.scenarioBubbleContainer.collapsed {
-  height: 48px;
-  max-height: 48px;
-  cursor: pointer;
-}
---- 👆 [삭제] --- */
-
-/* --- 👇 [수정] 포커스 스타일 유지 --- */
 .focusedBubble {
   border: var(--stroke-weight-1, 1px) solid
-    var(--Color-Light-Gradation-03, #3051ea);
+    var(--Color-Light-Gradation-03, #3051ea) !important;
 }
-/* --- 👆 [수정] --- */
 
 .scenarioBubbleContainer .header {
   flex-shrink: 0;
   padding: 12px 20px;
   height: 48px; /* 헤더 높이 유지 */
-  /* --- 👇 [수정] border-bottom 제거 (항상 접혀있으므로 불필요) --- */
-  /* border-bottom: 1px solid var(--panel-border-color); */
-  /* --- 👆 [수정] --- */
-  /* --- 👇 [추가] 헤더 내부 요소 정렬을 위해 flex 추가 --- */
   display: flex;
   align-items: center;
   justify-content: space-between; /* 양 끝 정렬 */
-  /* --- 👆 [추가] --- */
 }
-
-/* --- 👇 [삭제] scenarioBubbleContainer .history 관련 스타일 제거 ---
-.scenarioBubbleContainer .history {
-  flex-grow: 1;
-  mask-image: none;
-  transition: opacity 0.2s ease-out;
-  padding: 16px 20px;
-}
-
-.scenarioBubbleContainer.collapsed .history {
-  opacity: 0;
-  pointer-events: none;
-}
---- 👆 [삭제] --- */
 
 .scenarioBubbleContainer.dimmed {
   opacity: 0.4;
-  /* --- 👇 [수정] dimmed 상태에서도 클릭 가능하도록 pointer-events 제거 --- */
-  /* pointer-events: none; */
-  /* --- 👆 [수정] --- */
 }
-
-/* --- 👇 [삭제] dimmed 상태에서 header만 클릭 가능하게 하는 로직 제거 ---
-.scenarioBubbleContainer.dimmed .header {
-  pointer-events: auto;
-}
---- 👆 [삭제] --- */
 
 .scenarioBadge {
   margin-left: auto;
@@ -880,10 +904,8 @@ body.dark .history:hover::-webkit-scrollbar-thumb {
   border-bottom: none;
 }
 
-/* --- 👇 [수정] 행 hover 효과 --- */
 .formGridTable tbody tr:hover {
 }
-/* --- 👆 [여기까지] --- */
 
 .formGridTable td,
 .formGridTable th {
@@ -902,8 +924,66 @@ body.dark .formGridTable td {
   background-color: rgba(255, 255, 255, 0.05);
 }
 
-/* --- 👇 [수정] 다크모드 hover 효과 --- */
 body.dark .formGridTable tbody tr:hover {
   background-color: rgba(255, 255, 255, 0.1);
 }
-/* --- 👆 [여기까지] --- */
+
+/* 폼 입력 필드 그룹 */
+.formInputGroup {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px; /* 필드 사이의 간격 */
+  width: 100%;
+  padding: 12px 20px;
+}
+
+@keyframes scalePop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.popAnimation {
+  animation: scalePop 0.3s ease-in-out;
+}
+
+/* --- 👇 [수정] 활성화된 피드백 버튼 스타일 --- */
+.messageActionArea .actionButton.activeFeedback {
+  color: var(--Purple-03, #634de2); /* 활성 아이콘 색상 */
+}
+
+/* --- [추가] 활성 버튼 hover 시에도 색상 유지 --- */
+.messageActionArea .actionButton.activeFeedback:hover {
+  color: var(--Purple-03, #634de2);
+}
+/* --- 👆 [수정] --- */
+
+/* --- 👇 [추가] 봇 메시지 체이닝 스타일 --- */
+.chainedMessageItem {
+  width: 100%;
+}
+
+/* 체인된 아이템 사이에 간격 추가 (첫 번째 자식 제외) */
+.chainedMessageItem:not(:first-child) {
+  margin-top: 12px;
+  padding-top: 12px;
+  /* --- 👇 [수정] 구분선(border-top) 제거 --- */
+  /* border-top: 1px solid var(--panel-border-color); */
+  /* --- 👆 [수정] --- */
+}
+
+/* 폼 렌더러가 체인에 포함될 때 상단 패딩 제거 */
+.chainedMessageItem .formContainer {
+  /* padding-top: 0; (FormRenderer 루트에 패딩이 없으므로 불필요) */
+}
+.chainedMessageItem:not(:first-child) .formContainer {
+  /* padding-top: 12px; (FormRenderer 루트에 패딩이 없으므로 불필요) */
+}
+
+/* --- 👆 [추가] --- */

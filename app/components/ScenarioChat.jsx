@@ -1,481 +1,29 @@
+// app/components/ScenarioChat.jsx
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback } from "react";
 import { useChatStore } from "../store";
 import { useTranslations } from "../hooks/useTranslations";
+import { useAutoScroll } from "../hooks/useAutoScroll"; // [추가] 훅 임포트
 import styles from "./Chat.module.css";
 import { validateInput, interpolateMessage } from "../lib/chatbotEngine";
 import LogoIcon from "./icons/LogoIcon";
-import ArrowDropDownIcon from "./icons/ArrowDropDownIcon";
 import CheckCircle from "./icons/CheckCircle";
 import OpenInNewIcon from "./icons/OpenInNew";
 import CloseIcon from "./icons/CloseIcon";
 import ScenarioExpandIcon from "./icons/ScenarioExpandIcon";
-// ChevronDownIcon은 버블에서만 사용하므로 여기서는 필요 없을 수 있음
-// import ChevronDownIcon from "./icons/ChevronDownIcon";
+import ScenarioCollapseIcon from "./icons/ScenarioCollapseIcon";
+import MarkdownRenderer from "./MarkdownRenderer";
+import FormRenderer from "./FormRenderer";
+import ScenarioStatusBadge from "./ScenarioStatusBadge";
+import {
+  openLinkThroughParent,
+  postToParent,
+  PARENT_ORIGIN,
+  SCENARIO_PANEL_WIDTH,
+  delayParentAnimationIfNeeded,
+} from "../lib/parentMessaging";
 
-// FormRenderer 컴포넌트 (변경 없음 - 코드 생략)
-const FormRenderer = ({
-  node,
-  onFormSubmit,
-  disabled,
-  language,
-  slots,
-  onGridRowClick,
-}) => {
-  // ... (기존 FormRenderer 코드 유지) ...
-  const [formData, setFormData] = useState({});
-  const dateInputRef = useRef(null);
-  const { t } = useTranslations();
-
-  // useEffect를 사용하여 defaultValue로 formData 초기화
-  useEffect(() => {
-    const initialFormData = {};
-    if (node.data && Array.isArray(node.data.elements)) {
-      node.data.elements.forEach((el) => {
-        if (
-          el.name &&
-          el.defaultValue !== undefined &&
-          el.defaultValue !== null
-        ) {
-          let initialValue = interpolateMessage(String(el.defaultValue), slots);
-          if (el.type === "checkbox" && typeof initialValue === "string") {
-            initialValue = initialValue.split(",").map((s) => s.trim());
-          }
-          initialFormData[el.name] = initialValue;
-        }
-      });
-    }
-    setFormData(initialFormData);
-  }, [node.data.elements, slots]);
-
-  const handleInputChange = (name, value) => {
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleMultiInputChange = (name, value, checked) => {
-    setFormData((prev) => {
-      const existing = prev[name] || [];
-      const newValues = checked
-        ? [...existing, value]
-        : existing.filter((v) => v !== value);
-      // Ensure the value is always an array for checkboxes
-      return { ...prev, [name]: newValues.length > 0 ? newValues : [] };
-    });
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const finalFormData = { ...formData }; // 현재 formData 복사
-
-    for (const element of node.data.elements) {
-      let valueToValidate = formData[element.name];
-      if (
-        valueToValidate === undefined &&
-        element.defaultValue !== undefined &&
-        element.defaultValue !== null
-      ) {
-        valueToValidate = interpolateMessage(
-          String(element.defaultValue),
-          slots
-        );
-        // Do not automatically add interpolated default values to submission data
-        // Only use them for validation if no user input exists
-        // finalFormData[element.name] = valueToValidate; // 제출 데이터에는 추가하지 않음 (사용자 입력이 없으면 슬롯에 안 남김)
-      }
-      // If still undefined (no user input, no default), treat as empty string for validation
-      valueToValidate = valueToValidate ?? "";
-
-      if (element.type === "input" || element.type === "date") {
-        const { isValid, message } = validateInput(
-          valueToValidate, // 검증할 값 사용
-          element.validation,
-          language
-        );
-        if (!isValid) {
-          alert(message); // 간단한 알림 사용
-          return;
-        }
-      }
-      // Add validation for other types if needed (e.g., required dropbox/checkbox)
-    }
-    // Include only the fields that were actually interacted with or had a default value used in validation
-    const finalSubmissionData = {};
-    node.data.elements.forEach((el) => {
-      if (el.name && finalFormData[el.name] !== undefined) {
-        finalSubmissionData[el.name] = finalFormData[el.name];
-      }
-    });
-
-    onFormSubmit(finalSubmissionData); // 최종 데이터 제출
-  };
-
-  const handleDateInputClick = () => {
-    try {
-      dateInputRef.current?.showPicker();
-    } catch (error) {
-      console.error("Failed to show date picker:", error);
-    }
-  };
-
-  // 슬롯 데이터를 사용하는 그리드 요소가 있는지 확인
-  const hasSlotBoundGrid = node.data.elements?.some(
-    (el) =>
-      el.type === "grid" &&
-      el.optionsSlot &&
-      Array.isArray(slots[el.optionsSlot]) &&
-      slots[el.optionsSlot].length > 0 &&
-      typeof slots[el.optionsSlot][0] === "object" &&
-      slots[el.optionsSlot][0] !== null
-  );
-
-  return (
-    <form onSubmit={handleSubmit} className={styles.formContainer}>
-      <h3>{interpolateMessage(node.data.title || "Form", slots)}</h3>
-      <div className={styles.formContainerSeparator} />
-      {node.data.elements?.map((el) => {
-        const dateProps = {};
-        if (el.type === "date" && el.validation) {
-          if (el.validation.type === "today after")
-            dateProps.min = new Date().toISOString().split("T")[0];
-          else if (el.validation.type === "today before")
-            dateProps.max = new Date().toISOString().split("T")[0];
-          else if (el.validation.type === "custom") {
-            if (el.validation.startDate)
-              dateProps.min = el.validation.startDate;
-            if (el.validation.endDate) dateProps.max = el.validation.endDate;
-          }
-        }
-
-        let dropboxOptions = [];
-        if (el.type === "dropbox") {
-          if (el.optionsSlot && Array.isArray(slots[el.optionsSlot])) {
-            dropboxOptions = slots[el.optionsSlot].map((opt) =>
-              typeof opt === "object" && opt !== null
-                ? JSON.stringify(opt)
-                : String(opt)
-            );
-          } else if (Array.isArray(el.options)) {
-            dropboxOptions = el.options;
-          }
-        }
-
-        return (
-          <div key={el.id} className={styles.formElement}>
-            {el.type === "grid" ? (
-              (() => {
-                const gridDataFromSlot = el.optionsSlot
-                  ? slots[el.optionsSlot]
-                  : null;
-                const hasSlotData =
-                  Array.isArray(gridDataFromSlot) &&
-                  gridDataFromSlot.length > 0;
-
-                if (
-                  hasSlotData &&
-                  typeof gridDataFromSlot[0] === "object" &&
-                  gridDataFromSlot[0] !== null &&
-                  !Array.isArray(gridDataFromSlot[0])
-                ) {
-                  const originalDisplayKeys =
-                    el.displayKeys && el.displayKeys.length > 0
-                      ? el.displayKeys
-                      : Object.keys(gridDataFromSlot[0] || {});
-                  const filteredKeys = el.hideNullColumns
-                    ? originalDisplayKeys.filter((key) =>
-                        gridDataFromSlot.some(
-                          (obj) =>
-                            obj[key] !== null &&
-                            obj[key] !== undefined &&
-                            obj[key] !== ""
-                        )
-                      )
-                    : originalDisplayKeys;
-                  if (filteredKeys.length === 0)
-                    return (
-                      <div>
-                        {el.hideNullColumns
-                          ? "All columns hidden."
-                          : "No data columns found."}
-                      </div>
-                    );
-                  const columnWidths = filteredKeys.reduce((acc, key) => {
-                    const headerLength = interpolateMessage(key, slots).length;
-                    const maxLength = gridDataFromSlot.reduce(
-                      (max, obj) =>
-                        Math.max(
-                          max,
-                          String(interpolateMessage(obj[key] || "", slots))
-                            .length
-                        ),
-                      0
-                    );
-                    acc[key] = Math.max(
-                      5,
-                      Math.max(headerLength, maxLength) + 2
-                    );
-                    return acc;
-                  }, {});
-                  return (
-                    <div style={{ overflowX: "auto", width: "100%" }}>
-                      <table
-                        className={styles.formGridTable}
-                        style={{ tableLayout: "auto" }}
-                      >
-                        <thead>
-                          <tr>
-                            {filteredKeys.map((key) => (
-                              <th
-                                key={key}
-                                style={{
-                                  minWidth: `${columnWidths[key]}ch`,
-                                  textAlign: "left",
-                                  padding: "10px 12px",
-                                }}
-                              >
-                                {interpolateMessage(key, slots)}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {gridDataFromSlot.map((dataObject, index) => (
-                            <tr
-                              key={`${el.id}-${index}`}
-                              onClick={() =>
-                                !disabled && onGridRowClick(el, dataObject)
-                              }
-                              style={{
-                                cursor: disabled ? "default" : "pointer",
-                              }}
-                            >
-                              {filteredKeys.map((key) => (
-                                <td
-                                  key={key}
-                                  style={{
-                                    minWidth: `${columnWidths[key]}ch`,
-                                    whiteSpace: "nowrap",
-                                  }}
-                                >
-                                  {interpolateMessage(
-                                    dataObject[key] || "",
-                                    slots
-                                  )}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  );
-                } else {
-                  const dataArray = hasSlotData
-                    ? gridDataFromSlot
-                    : el.data || [];
-                  const rows = hasSlotData ? dataArray.length : el.rows || 0;
-                  const columns = hasSlotData
-                    ? dataArray[0]?.length || 0
-                    : el.columns || 0;
-                  if (rows === 0 || columns === 0)
-                    return <div>Grid data is empty.</div>;
-                  return (
-                    <table className={styles.formGridTable}>
-                      <tbody>
-                        {[...Array(rows)].map((_, r) => (
-                          <tr key={r}>
-                            {[...Array(columns)].map((_, c) => (
-                              <td key={c}>
-                                {interpolateMessage(
-                                  hasSlotData
-                                    ? dataArray[r]?.[c] || ""
-                                    : dataArray[r * columns + c] || "",
-                                  slots
-                                )}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  );
-                }
-              })()
-            ) : (
-              <>
-                <label className={styles.formLabel}>
-                  {interpolateMessage(el.label, slots)}
-                </label>
-                {el.type === "input" && (
-                  <input
-                    className={styles.formInput}
-                    type="text"
-                    placeholder={interpolateMessage(
-                      el.placeholder || "",
-                      slots
-                    )}
-                    value={
-                      formData[el.name] ??
-                      interpolateMessage(String(el.defaultValue ?? ""), slots)
-                    }
-                    onChange={(e) => handleInputChange(el.name, e.target.value)}
-                    disabled={disabled}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                )}
-                {el.type === "date" && (
-                  <input
-                    ref={dateInputRef}
-                    className={styles.formInput}
-                    type="date"
-                    value={formData[el.name] || ""}
-                    onChange={(e) => handleInputChange(el.name, e.target.value)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDateInputClick();
-                    }}
-                    disabled={disabled}
-                    {...dateProps}
-                  />
-                )}
-                {el.type === "dropbox" && (
-                  <div className={styles.selectWrapper}>
-                    <select
-                      className={styles.formInput}
-                      value={formData[el.name] || ""}
-                      onChange={(e) =>
-                        handleInputChange(el.name, e.target.value)
-                      }
-                      disabled={disabled}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <option value="" disabled>
-                        {t("select")}
-                      </option>
-                      {dropboxOptions.map((opt, idx) => (
-                        <option key={`${opt}-${idx}`} value={opt}>
-                          {interpolateMessage(opt, slots)}
-                        </option>
-                      ))}
-                    </select>
-                    <ArrowDropDownIcon
-                      style={{ color: "var(--Gray-07, #5E7599)" }}
-                    />
-                  </div>
-                )}
-                {el.type === "checkbox" &&
-                  (el.options || []).map((opt) => (
-                    <div
-                      key={opt}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        id={`${el.id}-${opt}`}
-                        value={opt}
-                        checked={(formData[el.name] || []).includes(opt)}
-                        onChange={(e) =>
-                          handleMultiInputChange(el.name, opt, e.target.checked)
-                        }
-                        disabled={disabled}
-                      />
-                      <label htmlFor={`${el.id}-${opt}`}>
-                        {interpolateMessage(opt, slots)}
-                      </label>
-                    </div>
-                  ))}
-              </>
-            )}
-          </div>
-        );
-      })}
-      {!hasSlotBoundGrid && !disabled && (
-        <div className={styles.formActionArea}>
-          <button
-            type="submit"
-            className={styles.formSubmitButton}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {t("submit")}
-          </button>
-        </div>
-      )}
-    </form>
-  );
-};
-
-// ScenarioStatusBadge 컴포넌트 (기존 코드 유지)
-const ScenarioStatusBadge = ({ status, t, isSelected }) => {
-  // ... (기존 코드)
-  if (isSelected) {
-    return (
-      <span className={`${styles.scenarioBadge} ${styles.selected}`}>
-        {t("statusSelected")}
-      </span>
-    );
-  }
-  if (!status) return null;
-  let text;
-  let statusClass;
-  switch (status) {
-    case "completed":
-      text = t("statusCompleted");
-      statusClass = "done";
-      break;
-    case "active":
-      text = t("statusActive");
-      statusClass = "incomplete";
-      break;
-    case "failed":
-      text = t("statusFailed");
-      statusClass = "failed";
-      break;
-    case "generating":
-      text = t("statusGenerating");
-      statusClass = "generating";
-      break;
-    case "canceled":
-      text = t("statusCanceled");
-      statusClass = "canceled";
-      break;
-    default:
-      return null;
-  }
-  return (
-    <span className={`${styles.scenarioBadge} ${styles[statusClass]}`}>
-      {text}
-    </span>
-  );
-};
-
-// connectParentLink 함수 (기존 코드 유지)
-const PARENT_ORIGIN =
-  process.env.NEXT_PUBLIC_PARENT_ORIGIN || "http://localhost:3000";
-const connectParentLink = (url) => {
-  // ... (기존 코드)
-  try {
-    if (!window.parent || window.parent === window) {
-      console.warn(
-        "Not running inside an iframe or parent window is inaccessible."
-      );
-      window.open(url, "_blank", "noopener,noreferrer"); // Fallback: 새 탭에서 열기
-      return;
-    }
-    const msg = { action: "callScreenOpen", payload: { url: url } };
-    window.parent.postMessage(msg, PARENT_ORIGIN);
-    console.log(`Sent message to parent (${PARENT_ORIGIN}):`, msg);
-  } catch (err) {
-    console.error("Failed to send message to parent window:", err);
-    window.open(url, "_blank", "noopener,noreferrer"); // Fallback: 새 탭에서 열기
-  }
-};
-
-// ScenarioChat 컴포넌트 본체
 export default function ScenarioChat() {
   const {
     activeScenarioSessionId,
@@ -486,6 +34,7 @@ export default function ScenarioChat() {
     setScenarioSelectedOption,
     isScenarioPanelExpanded,
     toggleScenarioPanelExpanded,
+    setScenarioSlots,
   } = useChatStore();
   const { t, language } = useTranslations();
 
@@ -500,56 +49,12 @@ export default function ScenarioChat() {
   const isScenarioLoading = activeScenario?.isLoading || false;
   const currentScenarioNodeId = activeScenario?.state?.currentNodeId;
   const scenarioId = activeScenario?.scenarioId;
+  const currentSlots = activeScenario?.slots || {};
 
-  const historyRef = useRef(null);
-  const wasAtBottomRef = useRef(true);
+  // [리팩토링] 커스텀 스크롤 훅 사용 (ref 및 effect 로직 대체)
+  const { scrollRef } = useAutoScroll(scenarioMessages, isScenarioLoading);
 
-  // 스크롤 관련 함수 및 useEffect (기존 코드 유지)
-  const updateWasAtBottom = useCallback(() => {
-    // ... (기존 코드)
-    const scrollContainer = historyRef.current;
-    if (!scrollContainer) return;
-    const scrollableDistance =
-      scrollContainer.scrollHeight -
-      scrollContainer.clientHeight -
-      scrollContainer.scrollTop;
-    wasAtBottomRef.current = scrollableDistance <= 5;
-  }, []);
-
-  useEffect(() => {
-    // ... (기존 코드)
-    const scrollContainer = historyRef.current;
-    if (!scrollContainer) return;
-    const handleScrollEvent = () => {
-      updateWasAtBottom();
-    };
-    updateWasAtBottom(); // 초기 상태 설정
-    scrollContainer.addEventListener("scroll", handleScrollEvent);
-    return () => {
-      scrollContainer.removeEventListener("scroll", handleScrollEvent);
-    };
-  }, [updateWasAtBottom]);
-
-  useEffect(() => {
-    // ... (기존 코드)
-    const scrollContainer = historyRef.current;
-    if (!scrollContainer) return;
-    const scrollToBottomIfNeeded = () => {
-      if (wasAtBottomRef.current) {
-        requestAnimationFrame(() => {
-          if (scrollContainer) {
-            scrollContainer.scrollTop = scrollContainer.scrollHeight;
-          }
-        });
-      }
-    };
-    const observer = new MutationObserver(scrollToBottomIfNeeded);
-    observer.observe(scrollContainer, { childList: true, subtree: true });
-    scrollToBottomIfNeeded();
-    return () => observer.disconnect();
-  }, [scenarioMessages, isScenarioLoading]);
-
-  // 로딩 상태 렌더링 (기존 코드 유지)
+  // 로딩 상태 렌더링
   if (!activeScenario) {
     return (
       <div className={styles.scenarioChatContainer}>
@@ -565,7 +70,6 @@ export default function ScenarioChat() {
     );
   }
 
-  // 핸들러 함수들 (기존 코드 유지)
   const handleFormSubmit = (formData) => {
     handleScenarioResponse({
       scenarioSessionId: activeScenarioSessionId,
@@ -576,27 +80,148 @@ export default function ScenarioChat() {
     });
   };
 
-  const handleGridRowSelected = (gridElement, selectedRowData) => {
-    const targetSlot = gridElement.selectSlot || "selectedRow";
-    const updatedSlots = {
-      ...activeScenario.slots,
-      [targetSlot]: selectedRowData,
-    };
+  const handleFormElementApiCall = async (element, localFormData) => {
+    const currentNode = activeScenario?.messages
+        .find(msg => msg.node?.id === currentScenarioNodeId)?.node;
 
-    handleScenarioResponse({
-      scenarioSessionId: activeScenarioSessionId,
-      currentNodeId: currentScenarioNodeId,
-      sourceHandle: null,
-      userInput: null,
-      formData: updatedSlots,
-    });
+    if (!currentNode || currentNode.type !== 'form') {
+        console.warn("API Call ABORTED: currentNode is not the form node.");
+        return;
+    }
+    const formElements = currentNode.data.elements;
+    const elementConfig = formElements.find(e => e.id === element.id);
+    
+    if (!elementConfig || !elementConfig.apiConfig || !elementConfig.resultSlot) {
+      alert("Search element is not configured correctly. (Missing API URL or Result Slot)");
+      return;
+    }
+
+    const { apiConfig, resultSlot } = elementConfig;
+    const searchTerm = localFormData[elementConfig.name] || '';
+    
+    let formSlotUpdates = {};
+    if (Array.isArray(formElements)) {
+        formElements.forEach(el => {
+            if (el.name && localFormData.hasOwnProperty(el.name)) {
+                formSlotUpdates[el.name] = localFormData[el.name];
+            }
+        });
+    }
+
+    let updatedSlotsForApi = { ...currentSlots, ...formSlotUpdates };
+    setScenarioSlots(activeScenarioSessionId, updatedSlotsForApi);
+
+    const allValues = { ...updatedSlotsForApi, value: searchTerm };
+    const method = apiConfig.method || 'POST'; 
+    
+    const { showEphemeralToast } = useChatStore.getState();
+
+    try {
+      const interpolatedUrl = interpolateMessage(apiConfig.url, allValues);
+      
+      let customHeaders = {};
+      if (apiConfig.headers) {
+          try {
+              const interpolatedHeadersString = interpolateMessage(apiConfig.headers, allValues);
+              customHeaders = JSON.parse(interpolatedHeadersString);
+          } catch (e) {
+              console.error("Error processing or parsing API headers JSON:", e, apiConfig.headers);
+          }
+      }
+
+      const fetchOptions = {
+        method: method,
+        headers: {
+            ...customHeaders
+        },
+      };
+
+      if (method === 'POST') {
+        const interpolatedBody = interpolateMessage(apiConfig.bodyTemplate, allValues);
+        fetchOptions.headers = {
+            'Content-Type': 'application/json',
+            ...fetchOptions.headers
+        };
+        fetchOptions.body = interpolatedBody;
+      }
+      
+      const response = await fetch(interpolatedUrl, fetchOptions);
+
+      if (!response.ok) {
+        let errorBody = await response.text();
+        let errorMessage = `(${response.status}) `;
+        try {
+            const errorJson = JSON.parse(errorBody);
+            errorMessage += errorJson.message || t('errorServer');
+        } catch (e) {
+            errorMessage += t('errorServer');
+        }
+        throw new Error(errorMessage); 
+      }
+
+      const responseData = await response.json();
+      setScenarioSlots(activeScenarioSessionId, { ...updatedSlotsForApi, [resultSlot]: responseData });
+      
+    } catch (error) { 
+      console.error("Form element API call failed:", error);
+      let toastMessage;
+      
+      if (error.name === 'AbortError' || error.message.includes('fetch failed') || error.message.includes('Failed to fetch')) {
+          toastMessage = t('errorApiRequest'); 
+      } else if (error.message.includes('(')) {
+          toastMessage = `${t('errorApiRequest')} ${error.message}`;
+      } else {
+          toastMessage = t('errorUnexpected');
+      }
+
+      showEphemeralToast(toastMessage, 'error');
+    }
+  };
+
+  const groupedMessages = [];
+  let currentChain = [];
+  scenarioMessages.forEach((msg) => {
+    if (msg.node?.type === "set-slot" || msg.node?.type === "setSlot") {
+      return;
+    }
+    const isChained = msg.node?.data?.chainNext === true;
+    const isUserMsg = msg.sender === "user";
+    if (isUserMsg) {
+      if (currentChain.length > 0) {
+        groupedMessages.push(currentChain);
+        currentChain = [];
+      }
+      groupedMessages.push(msg);
+    } else {
+      currentChain.push(msg);
+      if (!isChained) {
+        groupedMessages.push(currentChain);
+        currentChain = [];
+      }
+    }
+  });
+  if (currentChain.length > 0) {
+    groupedMessages.push(currentChain);
+  }
+
+  const containsMarkdownTable = (msg) => {
+    const content = msg.text || msg.node?.data?.content;
+    if (typeof content === "string") {
+      return content.includes("|---");
+    }
+    return false;
   };
 
   return (
     <div className={styles.scenarioChatContainer}>
       <div className={styles.scenarioHeader}>
         <div className={styles.headerContent}>
-          <ScenarioStatusBadge status={activeScenario?.status} t={t} />
+          <ScenarioStatusBadge
+            status={activeScenario?.status}
+            t={t}
+            styles={styles}
+            isSelected={true} 
+          />
           <span className={styles.headerTitle}>
             {t("scenarioTitle")(
               interpolateMessage(scenarioId || "Scenario", activeScenario.slots)
@@ -627,182 +252,246 @@ export default function ScenarioChat() {
             }}
             aria-pressed={isScenarioPanelExpanded}
           >
-            <ScenarioExpandIcon />
+            {isScenarioPanelExpanded ? (
+              <ScenarioCollapseIcon />
+            ) : (
+              <ScenarioExpandIcon />
+            )}
           </button>
 
-          {/* --- 👇 [수정] "숨기기" 버튼 클릭 시 setActivePanel('main') 호출 --- */}
           <button
             className={styles.headerCloseButton}
-            onClick={(e) => {
+            onClick={async (e) => {
               e.stopPropagation();
-              const widthToSend = isScenarioPanelExpanded ? -1064 : -784;
-              setActivePanel("main"); // 메인 패널로 전환 (포커스 이동 포함)
-              console.log("call postMessage to parent window");
-              const msg = {
-                action: "callChatbotResize",
-                payload: { width: widthToSend },
-              };
-              window.parent.postMessage(msg, PARENT_ORIGIN);
+              console.log(
+                `[Call Window Method] callChatbotResize(width: -${SCENARIO_PANEL_WIDTH}) to ${PARENT_ORIGIN} with Close Scenario Chat`
+              );
+              postToParent("callChatbotResize", {
+                width: -SCENARIO_PANEL_WIDTH,
+              });
+              await delayParentAnimationIfNeeded();
+              await setActivePanel("main");
             }}
           >
             <CloseIcon />
           </button>
-          {/* --- 👆 [수정] --- */}
-          {/* 종료 버튼 (기존 코드 유지) */}
         </div>
       </div>
 
-      {/* 시나리오 메시지 기록 (기존 코드 유지) */}
-      <div className={styles.history} ref={historyRef}>
-        {scenarioMessages
-          .filter((msg) => msg.node?.type !== "set-slot")
-          .map((msg, index) => (
+      <div className={styles.history} ref={scrollRef}>
+        {groupedMessages.map((group, index) => {
+          if (!Array.isArray(group)) {
+            const msg = group;
+            return (
+              <div
+                key={msg.id || `${activeScenarioSessionId}-msg-${index}`}
+                className={`${styles.messageRow} ${styles.userRow}`}
+              >
+                <div
+                  className={`GlassEffect ${styles.message} ${styles.userMessage}`}
+                >
+                  <div className={styles.messageContent}>
+                    <MarkdownRenderer
+                      content={interpolateMessage(
+                        msg.text,
+                        activeScenario.slots
+                      )}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          const chain = group;
+          const isRichContent = chain.some(
+            (msg) =>
+              msg.node?.type === "form" ||
+              (msg.node?.data?.elements && 
+                msg.node.data.elements.some((el) => el.type === "grid")) ||
+              msg.node?.type === "iframe" ||
+              containsMarkdownTable(msg)
+          );
+
+          let widthClass = "";
+          if (isRichContent) {
+            widthClass = styles.gridMessage;
+          } else {
+            const allTextContents = chain.map((msg) => {
+              return String(msg.text || msg.node?.data?.content || "");
+            });
+            const lines = allTextContents.join("\n").split("\n");
+            const maxLineLength = lines.reduce((maxLength, currentLine) => {
+              return Math.max(maxLength, currentLine.length);
+            }, 0);
+            const SHORT_THRESHOLD = 10;
+            const MEDIUM_THRESHOLD = 30;
+            if (maxLineLength < SHORT_THRESHOLD) {
+              widthClass = styles.width30;
+            } else if (maxLineLength < MEDIUM_THRESHOLD) {
+              widthClass = styles.width60;
+            } else {
+              widthClass = styles.gridMessage;
+            }
+          }
+
+
+          return (
             <div
-              key={msg.id || `${activeScenarioSessionId}-msg-${index}`}
-              className={`${styles.messageRow} ${
-                msg.sender === "user" ? styles.userRow : ""
-              }`}
+              key={chain[0].id || `${activeScenarioSessionId}-chain-${index}`}
+              className={`${styles.messageRow}`}
             >
               <div
                 className={`GlassEffect ${styles.message} ${
-                  msg.sender === "bot" ? styles.botMessage : styles.userMessage
-                } ${
-                  msg.node?.data?.elements?.some((el) => el.type === "grid")
-                    ? styles.gridMessage
-                    : ""
-                } ${msg.node?.type === "iframe" ? styles.iframeMessage : ""}`}
+                  styles.botMessage
+                } ${widthClass}`}
               >
                 <div
                   className={
-                    msg.node?.type === "form"
+                    chain.some((msg) => msg.node?.type === "form")
                       ? styles.scenarioFormMessageContentWrapper
                       : styles.scenarioMessageContentWrapper
                   }
                 >
-                  {msg.sender === "bot" &&
-                    !msg.node?.type?.includes("form") && (
-                      <LogoIcon className={styles.avatar} />
-                    )}
+                  {chain.some((msg) => msg.node?.type !== "form") && (
+                    <LogoIcon className={styles.avatar} />
+                  )}
 
                   <div className={styles.messageContent}>
-                    {msg.node?.type === "form" ? (
-                      <FormRenderer
-                        node={msg.node}
-                        onFormSubmit={handleFormSubmit}
-                        disabled={isCompleted}
-                        language={language}
-                        slots={activeScenario.slots}
-                        onGridRowClick={handleGridRowSelected}
-                      />
-                    ) : msg.node?.type === "iframe" ? (
-                      <div className={styles.iframeContainer}>
-                        <iframe
-                          src={interpolateMessage(
-                            msg.node.data.url,
-                            activeScenario.slots
-                          )}
-                          width={msg.node.data.width || "604px"}
-                          height={msg.node.data.height || "250"}
-                          style={{ border: "none", borderRadius: "8px" }}
-                          title="chatbot-iframe"
-                        ></iframe>
-                      </div>
-                    ) : msg.node?.type === "link" ? (
-                      <div>
-                        <a
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            connectParentLink(
-                              interpolateMessage(
-                                msg.node.data.content,
-                                activeScenario.slots
-                              )
-                            );
-                          }}
-                          target="_self"
-                          rel="noopener noreferrer"
-                          className={styles.linkNode}
-                        >
-                          {interpolateMessage(
-                            msg.node.data.display || msg.node.data.content,
-                            activeScenario.slots
-                          )}
-                          <OpenInNewIcon
-                            style={{
-                              marginLeft: "4px",
-                              verticalAlign: "middle",
-                              width: "16px",
-                              height: "16px",
-                            }}
+                    {chain.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className={styles.chainedMessageItem}
+                      >
+                        {msg.node?.type === "form" ? (
+                          <FormRenderer
+                            node={msg.node}
+                            onFormSubmit={handleFormSubmit}
+                            disabled={
+                              isCompleted ||
+                              msg.node.id !== currentScenarioNodeId
+                            }
+                            language={language}
+                            slots={currentSlots}
+                            setScenarioSlots={setScenarioSlots}
+                            activeScenarioSessionId={activeScenarioSessionId}
+                            onFormElementApiCall={handleFormElementApiCall}
                           />
-                        </a>
-                      </div>
-                    ) : (
-                      <p>
-                        {interpolateMessage(
-                          msg.text || msg.node?.data?.content,
-                          activeScenario.slots
-                        )}
-                      </p>
-                    )}
-                    {msg.node?.type === "branch" && msg.node.data.replies && (
-                      <div className={styles.scenarioList}>
-                        {msg.node.data.replies.map((reply) => {
-                          const selectedOption = msg.selectedOption;
-                          const interpolatedDisplayText = interpolateMessage(
-                            reply.display,
-                            activeScenario?.slots
-                          );
-                          const isSelected =
-                            selectedOption === interpolatedDisplayText;
-                          const isDimmed = selectedOption && !isSelected;
-                          return (
-                            <button
-                              key={reply.value}
-                              className={`${styles.optionButton} ${
-                                isSelected ? styles.selected : ""
-                              } ${isDimmed ? styles.dimmed : ""}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (selectedOption || isCompleted) return;
-                                setScenarioSelectedOption(
-                                  activeScenarioSessionId,
-                                  msg.node.id,
-                                  interpolatedDisplayText
-                                );
-                                handleScenarioResponse({
-                                  scenarioSessionId: activeScenarioSessionId,
-                                  currentNodeId: msg.node.id,
-                                  sourceHandle: reply.value,
-                                  userInput: interpolatedDisplayText,
-                                });
-                              }}
-                              disabled={isCompleted || !!selectedOption}
-                            >
-                              <span className={styles.optionButtonText}>
-                                {interpolatedDisplayText}
-                              </span>
-                              {interpolatedDisplayText
-                                .toLowerCase()
-                                .includes("link") ? (
-                                <OpenInNewIcon
-                                  style={{ color: "currentColor" }}
-                                />
-                              ) : (
-                                <CheckCircle />
+                        ) : msg.node?.type === "iframe" ? (
+                          <div className={styles.iframeContainer}>
+                            <iframe
+                              src={interpolateMessage(
+                                msg.node.data.url,
+                                activeScenario.slots
                               )}
-                            </button>
-                          );
-                        })}
+                              width={msg.node.data.width || "604px"}
+                              height={msg.node.data.height || "250"}
+                              style={{ border: "none", borderRadius: "8px" }}
+                              title="chatbot-iframe"
+                            ></iframe>
+                          </div>
+                        ) : msg.node?.type === "link" ? (
+                          <div>
+                            <a
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                openLinkThroughParent(
+                                  interpolateMessage(
+                                    msg.node.data.content,
+                                    activeScenario.slots
+                                  )
+                                );
+                              }}
+                              target="_self"
+                              rel="noopener noreferrer"
+                              className={styles.linkNode}
+                            >
+                              {interpolateMessage(
+                                msg.node.data.display || msg.node.data.content,
+                                activeScenario.slots
+                              )}
+                              <OpenInNewIcon
+                                style={{
+                                  marginLeft: "4px",
+                                  verticalAlign: "middle",
+                                  width: "16px",
+                                  height: "16px",
+                                }}
+                              />
+                            </a>
+                          </div>
+                        ) : (
+                          <MarkdownRenderer
+                            content={interpolateMessage(
+                              msg.text || msg.node?.data?.content,
+                              activeScenario.slots
+                            )}
+                          />
+                        )}
+                        {msg.node?.type === "branch" &&
+                          msg.node.data.replies && (
+                            <div className={styles.scenarioList}>
+                              {msg.node.data.replies.map((reply) => {
+                                const selectedOption = msg.selectedOption;
+                                const interpolatedDisplayText =
+                                  interpolateMessage(
+                                    reply.display,
+                                    activeScenario?.slots
+                                  );
+                                const isSelected =
+                                  selectedOption === interpolatedDisplayText;
+                                const isDimmed = selectedOption && !isSelected;
+                                return (
+                                  <button
+                                    key={reply.value}
+                                    className={`${styles.optionButton} ${
+                                      isSelected ? styles.selected : ""
+                                    } ${isDimmed ? styles.dimmed : ""}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (selectedOption || isCompleted) return;
+                                      setScenarioSelectedOption(
+                                        activeScenarioSessionId,
+                                        msg.node.id,
+                                        interpolatedDisplayText
+                                      );
+                                      handleScenarioResponse({
+                                        scenarioSessionId:
+                                          activeScenarioSessionId,
+                                        currentNodeId: msg.node.id,
+                                        sourceHandle: reply.value,
+                                        userInput: interpolatedDisplayText,
+                                      });
+                                    }}
+                                    disabled={isCompleted || !!selectedOption}
+                                  >
+                                    <span className={styles.optionButtonText}>
+                                      {interpolatedDisplayText}
+                                    </span>
+                                    {interpolatedDisplayText
+                                      .toLowerCase()
+                                      .includes("link") ? (
+                                      <OpenInNewIcon
+                                        style={{ color: "currentColor" }}
+                                      />
+                                    ) : (
+                                      <CheckCircle />
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                       </div>
-                    )}
+                    ))}
                   </div>
                 </div>
               </div>
             </div>
-          ))}
-        {/* 로딩 인디케이터 (기존 코드 유지) */}
+          );
+        })}
+
         {isScenarioLoading && (
           <div className={styles.messageRow}>
             <div

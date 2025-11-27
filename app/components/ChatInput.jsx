@@ -1,3 +1,4 @@
+// app/components/ChatInput.jsx
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -72,9 +73,20 @@ export default function ChatInput() {
   const setShortcutMenuOpen = useChatStore(
     (state) => state.setShortcutMenuOpen
   );
+  const isScenarioPanelExpanded = useChatStore(
+    (state) => state.isScenarioPanelExpanded
+  );
+  const openHistoryPanel = useChatStore((state) => state.openHistoryPanel);
+  const mainInputPlaceholder = useChatStore(
+    (state) => state.mainInputPlaceholder
+  );
+  const enableFavorites = useChatStore((state) => state.enableFavorites);
+  const mainInputValue = useChatStore((state) => state.mainInputValue);
+  const setMainInputValue = useChatStore((state) => state.setMainInputValue);
+  
+  const inputRef = useRef(null); // <textarea>를 참조
 
   const { t } = useTranslations();
-  const inputRef = useRef(null);
   const quickRepliesSlider = useDraggableScroll();
   const menuRef = useRef(null);
 
@@ -83,6 +95,10 @@ export default function ChatInput() {
     : null;
   const isInputDisabled = isLoading;
   const currentScenarioNodeId = activeScenario?.state?.currentNodeId;
+
+  const activeCategoryData =
+    shortcutMenuOpen &&
+    scenarioCategories.find((cat) => cat.name === shortcutMenuOpen);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -102,26 +118,45 @@ export default function ChatInput() {
     }
   }, [isInputDisabled, focusRequest, activePanel]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const input = e.target.elements.userInput.value;
-    if (!input.trim() || isLoading) return;
+  // --- 👇 [수정] 메시지 전송 로직 분리 및 순서 변경 ---
+  const submitMessage = async () => {
+    const input = mainInputValue.trim();
+    if (!input || isLoading) return;
 
-    if (activePanel === "scenario" && activeScenarioSessionId) {
-      // 시나리오 패널이 활성화 상태일 때 시나리오 응답 함수 호출
-      await handleScenarioResponse({
-        scenarioSessionId: activeScenarioSessionId,
-        currentNodeId: currentScenarioNodeId,
-        userInput: input,
-      });
-    } else {
-      // 메인 패널이 활성화 상태일 때 일반 응답 함수 호출
-      await handleResponse({ text: input });
+    // 1. 입력창 내용 및 높이 즉시 초기화 (UX 개선)
+    setMainInputValue("");
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
     }
 
-    e.target.reset();
+    // 2. 응답 처리 요청 (입력창 비운 후 실행)
+    await handleResponse({ text: input });
   };
 
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    submitMessage();
+  };
+
+  const handleKeyDown = (e) => {
+    // Shift + Enter가 아니면서 Enter 키만 눌렀을 때 전송
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submitMessage();
+    }
+    // Shift + Enter는 기본 동작(줄바꿈)을 허용
+  };
+
+  const handleInputChange = (e) => {
+    setMainInputValue(e.target.value);
+    
+    // Auto-resize logic
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto'; // Reset height to recalculate
+      inputRef.current.style.height = `${inputRef.current.scrollHeight}px`; // Set to scroll height
+    }
+  };
+  // --- 👆 [수정] ---
   const handleItemClick = (item) => {
     handleShortcutClick(item);
     setShortcutMenuOpen(null);
@@ -130,17 +165,18 @@ export default function ChatInput() {
   return (
     <div className={styles.inputArea}>
       <div className={styles.quickActionsContainer} ref={menuRef}>
+        {/* 1. 카테고리 버튼들 렌더링 */}
         {scenarioCategories.map((category) => (
           <div key={category.name} className={styles.categoryWrapper}>
             <button
               className={`GlassEffect ${styles.categoryButton} ${
                 shortcutMenuOpen === category.name ? styles.active : ""
               }`}
-              onClick={() =>
-                setShortcutMenuOpen(
-                  shortcutMenuOpen === category.name ? null : category.name
-                )
-              }
+              onClick={() => {
+                const nextMenu =
+                  shortcutMenuOpen === category.name ? null : category.name;
+                setShortcutMenuOpen(nextMenu);
+              }}
             >
               {category.name}{" "}
               <ChevronDownIcon
@@ -152,77 +188,86 @@ export default function ChatInput() {
                 }}
               />
             </button>
-            {shortcutMenuOpen === category.name && (
-              <div className={`GlassEffect ${styles.dropdownMenu}`}>
-                {category.subCategories.map((subCategory) => (
-                  <div
-                    key={subCategory.title}
-                    className={styles.subCategorySection}
-                  >
-                    <h4 className={styles.subCategoryTitle}>
-                      {subCategory.title}
-                    </h4>
-                    {subCategory.items.map((item) => {
-                      const isFavorited = favorites.some(
-                        (fav) =>
-                          fav.action.type === item.action.type &&
-                          fav.action.value === item.action.value
-                      );
-                      return (
-                        <div key={item.title} className={styles.dropdownItem}>
-                          <div
-                            className={styles.itemContentWrapper}
-                            onClick={() => handleItemClick(item)}
-                            role="button"
-                            tabIndex="0"
-                            onKeyDown={(e) =>
-                              (e.key === "Enter" || e.key === " ") &&
-                              handleItemClick(item)
-                            }
-                          >
-                            <button
-                              className={`${styles.favoriteButton} ${
-                                isFavorited ? styles.favorited : ""
-                              }`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleFavorite(item);
-                              }}
-                            >
-                              <StarIcon size={18} filled={isFavorited} />
-                            </button>
-                            <div className={styles.itemContent}>
-                              <span className={styles.itemTitle}>
-                                {item.title}
-                              </span>
-                              <span className={styles.itemDescription}>
-                                {item.description}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         ))}
+
+        {/* 3. 활성화된 드롭다운 메뉴 (루프 밖에 단 하나만 렌더링) */}
+        {activeCategoryData && (
+          <div className={`GlassEffect ${styles.dropdownMenu}`}>
+            {activeCategoryData.subCategories.map((subCategory) => (
+              <div
+                key={subCategory.title}
+                className={styles.subCategorySection}
+              >
+                <h4 className={styles.subCategoryTitle}>
+                  {subCategory.title}
+                </h4>
+                {subCategory.items.map((item) => {
+                  const isFavorited = favorites.some(
+                    (fav) =>
+                      fav.action.type === item.action.type &&
+                      fav.action.value === item.action.value
+                  );
+                  return (
+                    <div key={item.title} className={styles.dropdownItem}>
+                      <div
+                        className={styles.itemContentWrapper}
+                        onClick={() => handleItemClick(item)}
+                        role="button"
+                        tabIndex="0"
+                        onKeyDown={(e) =>
+                          (e.key === "Enter" || e.key === " ") &&
+                          handleItemClick(item)
+                        }
+                      >
+                        {enableFavorites && (
+                          <button
+                            className={`${styles.favoriteButton} ${
+                              isFavorited ? styles.favorited : ""
+                            }`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFavorite(item);
+                            }}
+                          >
+                            <StarIcon size={18} filled={isFavorited} />
+                          </button>
+                        )}
+                        <div className={styles.itemContent}>
+                          <span className={styles.itemTitle}>
+                            {item.title}
+                          </span>
+                          <span className={styles.itemDescription}>
+                            {item.description}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      <form className={styles.inputForm} onSubmit={handleSubmit}>
-        <input
+      <form
+        className={`${styles.inputForm} ${
+          activePanel === "scenario" ? styles.deactive : ""
+        }`}
+        onSubmit={handleSubmit}
+      >
+        <textarea
           ref={inputRef}
           name="userInput"
+          rows="1"
           className={styles.textInput}
-          placeholder={
-            activePanel === "scenario"
-              ? t("enterResponse")
-              : t("askAboutService")
-          }
+          placeholder={mainInputPlaceholder || t("askAboutService")}
           autoComplete="off"
           disabled={isInputDisabled}
+          value={mainInputValue}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
         />
         <button
           type="submit"
