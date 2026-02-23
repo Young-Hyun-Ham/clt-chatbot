@@ -49,7 +49,8 @@ export default function ScenarioBubble({ scenarioSessionId }) {
     activeScenario?.status === "completed" ||
     activeScenario?.status === "failed" ||
     activeScenario?.status === "canceled";
-  const scenarioId = activeScenario?.scenarioId;
+  const scenarioTitle = activeScenario?.title || "Scenario";  // ✅ id → title로 변경
+  const scenarioBody = activeScenario?.messages?.[0]?.text || activeScenario?.messages?.[0]?.node?.data?.content || "";  // ✅ body content 가져오기
   const isFocused =
     activePanel === "scenario" && focusedSessionId === scenarioSessionId;
 
@@ -116,10 +117,7 @@ export default function ScenarioBubble({ scenarioSessionId }) {
 
             <span className={styles.scenarioHeaderTitle}>
               {t("scenarioTitle")(
-                interpolateMessage(
-                  scenarioId || "Scenario",
-                  activeScenario?.slots
-                )
+                interpolateMessage(scenarioTitle, activeScenario?.slots)
               )}
             </span>
           </div>
@@ -129,6 +127,12 @@ export default function ScenarioBubble({ scenarioSessionId }) {
             </div>
           </div>
         </div>
+        {/* ✅ Body content 표시 */}
+        {scenarioBody && (
+          <div className={styles.messageContent}>
+            <p>{scenarioBody}</p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -452,7 +452,7 @@ export default function Chat() {
             {messages.map((msg, index) => {
               if (msg.id === "initial") return null;
 
-              if (msg.type === "scenario_bubble") {
+              if (msg.type === "scenario_bubble" || msg.type === "scenario_message") {
                 if (!showScenarioBubbles) {
                   return null;
                 }

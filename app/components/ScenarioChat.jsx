@@ -222,7 +222,7 @@ export default function ScenarioChat() {
           />
           <span className={styles.headerTitle}>
             {t("scenarioTitle")(
-              interpolateMessage(scenarioId || "Scenario", activeScenario.slots)
+              interpolateMessage(activeScenario?.title || "Scenario", activeScenario.slots)
             )}
           </span>
         </div>
@@ -461,6 +461,11 @@ export default function ScenarioChat() {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (selectedOption || isCompleted) return;
+                                      console.log(`[ScenarioChat] Reply clicked:`, {
+                                        nodeId: msg.node.id,
+                                        replyValue: reply.value,
+                                        displayText: interpolatedDisplayText,
+                                      });
                                       setScenarioSelectedOption(
                                         activeScenarioSessionId,
                                         msg.node.id,

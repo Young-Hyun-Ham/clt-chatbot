@@ -23,32 +23,53 @@ const getNextNode = (nodes, edges, currentNodeId, sourceHandle = null) => {
     return null;
   }
   
+  console.log(`[getNextNode] Found ${outgoingEdges.length} outgoing edge(s) from node ${currentNodeId}`);
+  console.log(`[getNextNode] sourceHandle provided: ${sourceHandle}`);
+  console.log(`[getNextNode] Available edges:`, outgoingEdges.map(e => ({ source: e.source, sourceHandle: e.sourceHandle, target: e.target })));
+  
   // Case 1: 단순 흐름 (엣지가 1개)
   if (outgoingEdges.length === 1) {
+    console.log(`[getNextNode] Single edge found, using it`);
     const nextNodeId = outgoingEdges[0].target;
-    return getNodeById(nodes, nextNodeId);
+    const nextNode = getNodeById(nodes, nextNodeId);
+    console.log(`[getNextNode] Next node (single edge):`, nextNode?.id);
+    return nextNode;
   }
   
   // Case 2: 분기 (sourceHandle로 구분)
   if (sourceHandle) {
     const selectedEdge = outgoingEdges.find(e => e.sourceHandle === sourceHandle);
     if (selectedEdge) {
-      return getNodeById(nodes, selectedEdge.target);
+      console.log(`[getNextNode] ✅ Found matching edge with sourceHandle: ${sourceHandle}`);
+      const nextNode = getNodeById(nodes, selectedEdge.target);
+      console.log(`[getNextNode] Next node (matching handle):`, nextNode?.id);
+      return nextNode;
+    } else {
+      console.warn(`[getNextNode] ⚠️ No edge found for sourceHandle: ${sourceHandle}. Available handles:`, outgoingEdges.map(e => e.sourceHandle));
     }
   }
   
   // Case 3: 기본값 (첫 번째 엣지)
+  console.log(`[getNextNode] Using first edge as fallback`);
   const nextNodeId = outgoingEdges[0].target;
-  return getNodeById(nodes, nextNodeId);
+  const nextNode = getNodeById(nodes, nextNodeId);
+  console.log(`[getNextNode] Next node (fallback):`, nextNode?.id);
+  return nextNode;
 };
 
 // ✅ 헬퍼 함수: 노드가 사용자 입력을 기다리는지 판정
 const isInteractiveNode = (node) => {
   if (!node) return false;
+  
+  // message 타입: replies가 있으면 interactive, 없으면 non-interactive
+  if (node.type === 'message') {
+    const hasReplies = node.data?.replies && node.data.replies.length > 0;
+    return hasReplies;
+  }
+  
   return (
     node.type === 'slotfilling' ||
     node.type === 'form' ||
-    node.type === 'message' ||
     node.type === 'branch' ||
     (node.type === 'branch' && node.data?.evaluationType !== 'CONDITION')
   );
@@ -247,8 +268,9 @@ export const createScenarioHandlersSlice = (set, get) => ({
               messages: firstNode ? [{
                 id: firstNode.id,
                 sender: 'bot',
-                text: firstNode.data?.content || '',  // ✅ text 필드 추가 (Chat.jsx와 호환)
+                text: firstNode.data?.content || '',
                 node: firstNode,
+                type: 'scenario_message',  // ✅ 메타데이터 추가
               }] : [],
               state: {
                 scenario_id: scenarioId,
@@ -274,12 +296,15 @@ export const createScenarioHandlersSlice = (set, get) => ({
       console.log(`[openScenarioPanel] ✅ Scenario panel activated`);
 
       // ✅ [NEW] 자동 진행 필요 여부 판정
-      if (firstNode && isAutoPassthroughNode(firstNode)) {
-        console.log(`[openScenarioPanel] First node is auto-passthrough (${firstNode.type}), continuing...`);
+      const shouldAutoProgress = firstNode && (isAutoPassthroughNode(firstNode) || !isInteractiveNode(firstNode));
+      
+      if (shouldAutoProgress) {
+        const reason = isAutoPassthroughNode(firstNode) ? 'auto-passthrough' : 'no-replies';
+        console.log(`[openScenarioPanel] First node should auto-progress (${reason}), continuing...`);
         await new Promise(resolve => setTimeout(resolve, 300));
         await get().continueScenarioIfNeeded(firstNode, newScenarioSessionId);
       } else {
-        console.log(`[openScenarioPanel] First node is interactive or terminal, waiting for user.`);
+        console.log(`[openScenarioPanel] First node is interactive (has replies), waiting for user.`);
       }
 
       return;
@@ -357,6 +382,13 @@ export const createScenarioHandlersSlice = (set, get) => ({
     const currentNodeId = currentScenario.state?.current_node_id;
     const currentNode = getNodeById(nodes, currentNodeId);
 
+    console.log(`[handleScenarioResponse] Called with payload:`, { 
+      scenarioSessionId, 
+      sourceHandle: payload.sourceHandle, 
+      userInput: payload.userInput,
+      formData: payload.formData
+    });
+
     set(state => ({
         scenarioStates: { ...state.scenarioStates, [scenarioSessionId]: { ...currentScenario, isLoading: true } }
     }));
@@ -366,12 +398,19 @@ export const createScenarioHandlersSlice = (set, get) => ({
 
         // ✅ [NEW] 사용자 입력 추가
         if (payload.userInput) {
-            newMessages.push({ id: `user-${Date.now()}`, sender: 'user', text: payload.userInput });
+            console.log(`[handleScenarioResponse] Adding user message:`, payload.userInput);
+            newMessages.push({ 
+              id: `user-${Date.now()}`, 
+              sender: 'user', 
+              text: payload.userInput,
+              type: 'scenario_message',  // ✅ 메타데이터 추가
+            });
         }
 
         // ✅ [NEW] 프론트엔드에서 다음 노드 결정
+        console.log(`[handleScenarioResponse] Getting next node from currentNodeId: ${currentNodeId}`);
         const nextNode = getNextNode(nodes, edges, currentNodeId, payload.sourceHandle);
-        console.log(`[handleScenarioResponse] Current node: ${currentNodeId}, Next node: ${nextNode?.id || 'END'}`);
+        console.log(`[handleScenarioResponse] Result -> Current node: ${currentNodeId}, Next node: ${nextNode?.id || 'END'} (type: ${nextNode?.type})`);
 
         if (!nextNode) {
           // 시나리오 종료
@@ -380,6 +419,7 @@ export const createScenarioHandlersSlice = (set, get) => ({
             id: `bot-complete-${Date.now()}`,
             sender: 'bot',
             text: locales[language]?.scenarioComplete || 'Scenario complete.',
+            type: 'scenario_message',  // ✅ 메타데이터 추가
           });
 
           const updatePayload = {
@@ -413,8 +453,9 @@ export const createScenarioHandlersSlice = (set, get) => ({
           newMessages.push({
             id: nextNode.id,
             sender: 'bot',
-            text: nextNode.data?.content || '',  // ✅ text 필드 추가 (Chat.jsx와 호환)
+            text: nextNode.data?.content || '',
             node: nextNode,
+            type: 'scenario_message',  // ✅ 메타데이터 추가
           });
         }
 
@@ -562,8 +603,55 @@ export const createScenarioHandlersSlice = (set, get) => ({
         break;
       }
 
-      // 자동 진행 노드 처리 (API, LLM 등은 백엔드에서 처리)
-      if (isAutoPassthroughNode(currentNode)) {
+      // 자동 진행 가능한 노드 처리
+      // 1. replies가 없는 message 노드 (단순 표시만 하고 넘어감)
+      if (currentNode.type === 'message' && !isInteractiveNode(currentNode)) {
+        console.log(`[continueScenarioIfNeeded] Message node without replies (${currentNode.id}), auto-advancing...`);
+        
+        // ✅ 메시지 추가
+        set(state => {
+          const scenario = state.scenarioStates[scenarioSessionId];
+          if (!scenario) return state;
+          
+          const messages = [...(scenario.messages || [])];
+          if (!messages.find(m => m.node?.id === currentNode.id)) {
+            messages.push({
+              id: currentNode.id,
+              sender: 'bot',
+              text: currentNode.data?.content || '',
+              node: currentNode,
+              type: 'scenario_message',  // ✅ 메타데이터 추가
+            });
+          }
+          
+          return {
+            scenarioStates: {
+              ...state.scenarioStates,
+              [scenarioSessionId]: {
+                ...scenario,
+                messages,
+                state: {
+                  scenario_id: scenario.scenario_id,
+                  current_node_id: currentNode.id,
+                  awaiting_input: false,
+                },
+              },
+            },
+          };
+        });
+        
+        const nextNode = getNextNode(nodes, edges, currentNode.id);
+        if (nextNode) {
+          console.log(`[continueScenarioIfNeeded] Next node from edge: ${nextNode.id}`);
+          currentNode = nextNode;
+        } else {
+          console.log(`[continueScenarioIfNeeded] No next node from edges, stopping.`);
+          isLoopActive = false;
+          break;
+        }
+      }
+      // 2. 자동 처리 노드 (API, LLM 등은 백엔드에서 처리)
+      else if (isAutoPassthroughNode(currentNode)) {
         console.log(`[continueScenarioIfNeeded] Auto-passthrough node (${currentNode.type}), calling backend...`);
         
         // ✅ [NEW] 백엔드에 이 노드 실행을 요청
@@ -646,8 +734,9 @@ export const createScenarioHandlersSlice = (set, get) => ({
         messages.push({
           id: currentNode.id,
           sender: 'bot',
-          text: currentNode.data?.content || '',  // ✅ text 필드 추가 (Chat.jsx와 호환)
+          text: currentNode.data?.content || '',
           node: currentNode,
+          type: 'scenario_message',  // ✅ 메타데이터 추가
         });
       }
 
