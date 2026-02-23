@@ -91,7 +91,7 @@ export default function ChatInput() {
     ? scenarioStates[activeScenarioSessionId]
     : null;
   const isInputDisabled = isLoading;
-  const currentScenarioNodeId = activeScenario?.state?.currentNodeId;
+  const currentScenarioNodeId = activeScenario?.state?.current_node_id;
 
   const activeCategoryData =
     shortcutMenuOpen &&

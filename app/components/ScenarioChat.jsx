@@ -25,17 +25,15 @@ import {
 } from "../lib/parentMessaging";
 
 export default function ScenarioChat() {
-  const {
-    activeScenarioSessionId,
-    scenarioStates,
-    handleScenarioResponse,
-    endScenario,
-    setActivePanel,
-    setScenarioSelectedOption,
-    isScenarioPanelExpanded,
-    toggleScenarioPanelExpanded,
-    setScenarioSlots,
-  } = useChatStore();
+  const activeScenarioSessionId = useChatStore((state) => state.activeScenarioSessionId);
+  const scenarioStates = useChatStore((state) => state.scenarioStates);
+  const handleScenarioResponse = useChatStore((state) => state.handleScenarioResponse);
+  const endScenario = useChatStore((state) => state.endScenario);
+  const setActivePanel = useChatStore((state) => state.setActivePanel);
+  const setScenarioSelectedOption = useChatStore((state) => state.setScenarioSelectedOption);
+  const isScenarioPanelExpanded = useChatStore((state) => state.isScenarioPanelExpanded);
+  const toggleScenarioPanelExpanded = useChatStore((state) => state.toggleScenarioPanelExpanded);
+  const setScenarioSlots = useChatStore((state) => state.setScenarioSlots);
   const { t, language } = useTranslations();
 
   const activeScenario = activeScenarioSessionId
@@ -47,8 +45,8 @@ export default function ScenarioChat() {
     activeScenario?.status === "canceled";
   const scenarioMessages = activeScenario?.messages || [];
   const isScenarioLoading = activeScenario?.isLoading || false;
-  const currentScenarioNodeId = activeScenario?.state?.currentNodeId;
-  const scenarioId = activeScenario?.scenarioId;
+  const currentScenarioNodeId = activeScenario?.state?.current_node_id;
+  const scenarioId = activeScenario?.scenario_id;
   const currentSlots = activeScenario?.slots || {};
 
   // [리팩토링] 커스텀 스크롤 훅 사용 (ref 및 effect 로직 대체)
@@ -279,31 +277,43 @@ export default function ScenarioChat() {
       </div>
 
       <div className={styles.history} ref={scrollRef}>
-        {groupedMessages.map((group, index) => {
-          if (!Array.isArray(group)) {
-            const msg = group;
-            return (
-              <div
-                key={msg.id || `${activeScenarioSessionId}-msg-${index}`}
-                className={`${styles.messageRow} ${styles.userRow}`}
-              >
-                <div
-                  className={`GlassEffect ${styles.message} ${styles.userMessage}`}
-                >
-                  <div className={styles.messageContent}>
-                    <MarkdownRenderer
-                      content={interpolateMessage(
-                        msg.text,
-                        activeScenario.slots
-                      )}
-                    />
-                  </div>
+        {scenarioMessages.length === 0 ? (
+          <div className={styles.messageRow}>
+            <div className={`${styles.message} ${styles.botMessage}`}>
+              <div className={styles.scenarioMessageContentWrapper}>
+                <LogoIcon className={styles.avatar} />
+                <div className={styles.messageContent}>
+                  <p>{t("loading")}</p>
                 </div>
               </div>
-            );
-          }
+            </div>
+          </div>
+        ) : (
+          groupedMessages.map((group, index) => {
+            if (!Array.isArray(group)) {
+              const msg = group;
+              return (
+                <div
+                  key={msg.id || `${activeScenarioSessionId}-msg-${index}`}
+                  className={`${styles.messageRow} ${styles.userRow}`}
+                >
+                  <div
+                    className={`GlassEffect ${styles.message} ${styles.userMessage}`}
+                  >
+                    <div className={styles.messageContent}>
+                      <MarkdownRenderer
+                        content={interpolateMessage(
+                          msg.text,
+                          activeScenario.slots
+                        )}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            }
 
-          const chain = group;
+            const chain = group;
           const isRichContent = chain.some(
             (msg) =>
               msg.node?.type === "form" ||
@@ -490,7 +500,8 @@ export default function ScenarioChat() {
               </div>
             </div>
           );
-        })}
+        })
+        )}
 
         {isScenarioLoading && (
           <div className={styles.messageRow}>

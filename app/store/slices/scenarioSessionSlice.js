@@ -64,8 +64,8 @@ export const createScenarioSessionSlice = (set, get) => ({
     };
     
     // 초기 조회 및 폴링 시작 (5초마다)
-    poll();
-    pollInterval = setInterval(poll, 5000);
+    //poll();
+    //pollInterval = setInterval(poll, 5000);
     
     // cleanup 함수 저장
     const unsubscribe = () => {

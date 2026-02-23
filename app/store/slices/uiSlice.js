@@ -283,10 +283,12 @@ export const createUISlice = (set, get) => ({
   resetScenarioPanelExpansion: () => set({ isScenarioPanelExpanded: false }),
 
   setActivePanel: async (panel, sessionId = null) => {
+    console.log(`[setActivePanel] Called with panel: ${panel}, sessionId: ${sessionId}`);
     const previousActivePanel = get().activePanel;
     const wasScenarioPanelActive = previousActivePanel === "scenario";
     const wasExpanded = get().isScenarioPanelExpanded;
     if (panel === "scenario") {
+      console.log(`[setActivePanel] Setting activeScenarioSessionId to:`, sessionId);
       if (!wasScenarioPanelActive) {
         console.log(
           `[Call Window Method] callChatbotResize(width: ${SCENARIO_PANEL_WIDTH}) to ${PARENT_ORIGIN} with Activate Scenario Panel`
@@ -300,6 +302,7 @@ export const createUISlice = (set, get) => ({
         lastFocusedScenarioSessionId: sessionId,
         isScenarioPanelExpanded: wasScenarioPanelActive ? wasExpanded : false,
       });
+      console.log(`[setActivePanel] ✅ State updated:`, { activePanel: panel, activeScenarioSessionId: sessionId });
     } else {
       set({
         activePanel: "main",
