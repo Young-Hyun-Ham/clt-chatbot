@@ -849,7 +849,7 @@ export const createScenarioHandlersSlice = (set, get) => ({
         
         // 🔴 [NEW] Delay 노드는 프론트엔드에서 처리
         if (currentNode.type === 'delay') {
-          const delayMs = currentNode.data?.delay_ms || currentNode.data?.delayMs || 1000;
+          const delayMs = currentNode.data?.duration || currentNode.data?.delay_ms || currentNode.data?.delayMs || 1000;
           console.log(`[continueScenarioIfNeeded] Delay node, waiting ${delayMs}ms...`);
           await new Promise(resolve => setTimeout(resolve, delayMs));
           
@@ -866,22 +866,36 @@ export const createScenarioHandlersSlice = (set, get) => ({
         // setSlot 노드도 프론트엔드에서 처리 (상태만 업데이트)
         else if (currentNode.type === 'setSlot' || currentNode.type === 'set-slot') {
           console.log(`[continueScenarioIfNeeded] SetSlot node, updating slots...`);
+          console.log(`[continueScenarioIfNeeded] SetSlot data:`, currentNode.data);
           
-          // slots 업데이트 (필요시)
-          const slotName = currentNode.data?.variable;
-          const slotValue = currentNode.data?.value;
-          if (slotName && slotValue) {
+          // slots 업데이트 (assignments 배열 처리)
+          const assignments = currentNode.data?.assignments || [];
+          if (assignments.length > 0) {
             const currentScenario = get().scenarioStates[scenarioSessionId];
             if (currentScenario) {
+              const updatedSlots = { ...currentScenario.slots };
+              
+              // 각 assignment 처리
+              assignments.forEach(assignment => {
+                const key = assignment.key;
+                let value = assignment.value;
+                
+                // {{slotName}} 형식인 경우 현재 슬롯에서 가져오기
+                if (value && value.startsWith('{{') && value.endsWith('}}')) {
+                  const refSlotName = value.slice(2, -2);
+                  value = currentScenario.slots[refSlotName] || value;
+                }
+                
+                updatedSlots[key] = value;
+                console.log(`[continueScenarioIfNeeded] SetSlot updated: ${key} = ${value}`);
+              });
+              
               set(state => ({
                 scenarioStates: {
                   ...state.scenarioStates,
                   [scenarioSessionId]: {
                     ...state.scenarioStates[scenarioSessionId],
-                    slots: {
-                      ...currentScenario.slots,
-                      [slotName]: slotValue,
-                    },
+                    slots: updatedSlots,
                   },
                 },
               }));
