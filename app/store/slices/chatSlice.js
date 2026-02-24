@@ -78,6 +78,9 @@ export const createChatSlice = (set, get) => {
           sender: msg.role === 'user' ? 'user' : 'bot', // role -> sender 변환
           text: msg.content, // content -> text 변환
           createdAt: msg.created_at,
+          type: msg.type, // 메시지 type 포함 (scenario_bubble 등)
+          // ✅ 백엔드에서 scenario_session_id 포함 예정
+          scenarioSessionId: msg.scenario_session_id,
           // 필요한 경우 추가 필드 매핑
         }));
         

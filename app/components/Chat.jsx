@@ -222,30 +222,28 @@ const MessageWithButtons = ({ msg }) => {
 };
 
 export default function Chat() {
-  const {
-    messages,
-    isLoading,
-    openScenarioPanel,
-    loadMoreMessages,
-    hasMoreMessages,
-    theme,
-    setTheme,
-    fontSize,
-    setFontSize,
-    scrollToMessageId,
-    setScrollToMessageId,
-    activePanel,
-    focusChatInput,
-    forceScrollToBottom,
-    setForceScrollToBottom,
-    scrollAmount,
-    resetScroll,
-    selectedOptions,
-    setSelectedOption,
-    dimUnfocusedPanels,
-    setMessageFeedback,
-    showScenarioBubbles,
-  } = useChatStore();
+  const messages = useChatStore((state) => state.messages);
+  const isLoading = useChatStore((state) => state.isLoading);
+  const openScenarioPanel = useChatStore((state) => state.openScenarioPanel);
+  const loadMoreMessages = useChatStore((state) => state.loadMoreMessages);
+  const hasMoreMessages = useChatStore((state) => state.hasMoreMessages);
+  const theme = useChatStore((state) => state.theme);
+  const setTheme = useChatStore((state) => state.setTheme);
+  const fontSize = useChatStore((state) => state.fontSize);
+  const setFontSize = useChatStore((state) => state.setFontSize);
+  const scrollToMessageId = useChatStore((state) => state.scrollToMessageId);
+  const setScrollToMessageId = useChatStore((state) => state.setScrollToMessageId);
+  const activePanel = useChatStore((state) => state.activePanel);
+  const focusChatInput = useChatStore((state) => state.focusChatInput);
+  const forceScrollToBottom = useChatStore((state) => state.forceScrollToBottom);
+  const setForceScrollToBottom = useChatStore((state) => state.setForceScrollToBottom);
+  const scrollAmount = useChatStore((state) => state.scrollAmount);
+  const resetScroll = useChatStore((state) => state.resetScroll);
+  const selectedOptions = useChatStore((state) => state.selectedOptions);
+  const setSelectedOption = useChatStore((state) => state.setSelectedOption);
+  const dimUnfocusedPanels = useChatStore((state) => state.dimUnfocusedPanels);
+  const setMessageFeedback = useChatStore((state) => state.setMessageFeedback);
+  const showScenarioBubbles = useChatStore((state) => state.showScenarioBubbles);
   
   const [copiedMessageId, setCopiedMessageId] = useState(null);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
@@ -460,6 +458,7 @@ export default function Chat() {
                   <ScenarioBubble
                     key={msg.id || msg.scenarioSessionId}
                     scenarioSessionId={msg.scenarioSessionId}
+                    messageData={msg}  // ✅ 메시지 전체 데이터 전달
                   />
                 );
               } else {

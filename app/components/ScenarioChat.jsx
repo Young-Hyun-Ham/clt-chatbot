@@ -49,6 +49,16 @@ export default function ScenarioChat() {
   const scenarioId = activeScenario?.scenario_id;
   const currentSlots = activeScenario?.slots || {};
 
+  // 🔴 [NEW] 디버그 로그
+  console.log(`[ScenarioChat] activeScenario:`, {
+    activeScenarioSessionId,
+    hasActiveScenario: !!activeScenario,
+    messagesCount: scenarioMessages.length,
+    messages: scenarioMessages,
+    currentNodeId: currentScenarioNodeId,
+    status: activeScenario?.status,
+  });
+
   // [리팩토링] 커스텀 스크롤 훅 사용 (ref 및 effect 로직 대체)
   const { scrollRef } = useAutoScroll(scenarioMessages, isScenarioLoading);
 

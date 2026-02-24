@@ -11,13 +11,24 @@ export const createScenarioSessionSlice = (set, get) => ({
     const { user, currentConversationId, unsubscribeScenariosMap, language, showEphemeralToast } = get();
     if (!user || !currentConversationId || unsubscribeScenariosMap[sessionId]) return;
 
-    // --- [임시] Firestore에서 FastAPI로 마이그레이션 필요 ---
-    // 실시간 동기화가 필요한 경우 폴링 또는 WebSocket 구현 필요
-    console.log(`[TODO] subscribeToScenarioSession needs FastAPI implementation for session ${sessionId}`);
+    // 🔴 [NEW] 로컬에 데이터가 있으면 폴링 불필요
+    const existingScenario = get().scenarioStates[sessionId];
+    console.log(`[subscribeToScenarioSession] Checking local state for ${sessionId}:`, {
+      hasMessages: !!existingScenario?.messages,
+      messagesCount: existingScenario?.messages?.length,
+      hasState: !!existingScenario?.state,
+      currentNodeId: existingScenario?.state?.current_node_id,
+    });
     
-    // 임시로 polling 구현 (향후 개선 필요)
-    let pollInterval = null;
-    const poll = async () => {
+    if (existingScenario?.messages && existingScenario?.state) {
+      console.log(`[subscribeToScenarioSession] ✓ Local state already exists, no fetch needed for ${sessionId}`);
+      return;
+    }
+
+    console.log(`[subscribeToScenarioSession] Local state missing, fetching from server for ${sessionId}`);
+    
+    // 🟢 [NEW] 재진입 시: 초기 조회만 (폴링 아님)
+    const fetchScenarioState = async () => {
       try {
         const response = await fetch(
           `${FASTAPI_BASE_URL}/conversations/${currentConversationId}/scenario-sessions/${sessionId}`,
@@ -38,13 +49,26 @@ export const createScenarioSessionSlice = (set, get) => ({
         const data = await response.json();
         const scenarioData = data.data || data;
         
+        console.log(`[subscribeToScenarioSession] ✅ Fetched state for ${sessionId}:`, {
+          status: scenarioData.status,
+          current_node_id: scenarioData.state?.current_node_id,
+          messages_count: scenarioData.messages?.length || 0,
+        });
+        
         set(state => {
             const currentLocalState = state.scenarioStates[sessionId];
+            
+            // 🔴 [NEW] 로컬 데이터가 이미 있으면 백엔드 빈 데이터로 덮어쓰지 않음
+            if (currentLocalState?.messages && currentLocalState?.state) {
+              console.log(`[subscribeToScenarioSession] Local state already exists, not overwriting with server data`);
+              return state;
+            }
+            
             const newScenarioStates = {
                 ...state.scenarioStates,
                 [sessionId]: {
                     ...(currentLocalState || {}),
-                    ...scenarioData
+                    ...scenarioData  // 로컬 데이터 없을 때만 서버 데이터 적용
                 }
             };
             const newActiveSessions = Object.keys(newScenarioStates);
@@ -55,21 +79,20 @@ export const createScenarioSessionSlice = (set, get) => ({
             };
         });
       } catch (error) {
-        console.error(`Error polling scenario session ${sessionId}:`, error);
+        console.error(`Error fetching scenario session ${sessionId}:`, error);
         const errorKey = getErrorKey(error);
-        const message = locales[language]?.[errorKey] || 'Error syncing scenario state.';
+        const message = locales[language]?.[errorKey] || 'Error loading scenario state.';
         showEphemeralToast(message, 'error');
         get().unsubscribeFromScenarioSession(sessionId);
       }
     };
     
-    // 초기 조회 및 폴링 시작 (5초마다)
-    //poll();
-    //pollInterval = setInterval(poll, 5000);
+    // 초기 조회 실행 (한 번만)
+    fetchScenarioState();
     
-    // cleanup 함수 저장
+    // cleanup 함수 저장 (빈 함수, 폴링 없으므로)
     const unsubscribe = () => {
-      if (pollInterval) clearInterval(pollInterval);
+      // 폴링이 없으므로 정리할 것 없음
     };
     
     set(state => ({
