@@ -18,7 +18,24 @@ import ScenarioStatusBadge from "./ScenarioStatusBadge";
 
 // ScenarioBubble 컴포넌트 본체
 export default function ScenarioBubble({ scenarioSessionId, messageData }) {
-  const scenarioStates = useChatStore((state) => state.scenarioStates);
+  // ✅ [최적화] selector를 사용하여 특정 시나리오 상태만 구독
+  // 다른 시나리오의 상태 변경 시 이 컴포넌트는 리렌더링되지 않음
+  const activeScenario = useChatStore(
+    (state) => scenarioSessionId ? state.scenarioStates[scenarioSessionId] : null,
+    (prev, next) => {
+      // 깊은 비교를 위한 커스텀 비교 함수
+      if (prev === next) return true;
+      if (!prev || !next) return prev === next;
+      // messages, status, slots, title 비교
+      return (
+        prev.messages?.length === next.messages?.length &&
+        prev.status === next.status &&
+        JSON.stringify(prev.slots) === JSON.stringify(next.slots) &&
+        prev.title === next.title
+      );
+    }
+  );
+  
   const endScenario = useChatStore((state) => state.endScenario);
   const setActivePanel = useChatStore((state) => state.setActivePanel);
   const activePanel = useChatStore((state) => state.activePanel);
@@ -26,18 +43,6 @@ export default function ScenarioBubble({ scenarioSessionId, messageData }) {
   const dimUnfocusedPanels = useChatStore((state) => state.dimUnfocusedPanels);
   const openScenarioPanel = useChatStore((state) => state.openScenarioPanel);
   const { t } = useTranslations(); // language 제거
-
-  const activeScenario = scenarioSessionId
-    ? scenarioStates[scenarioSessionId]
-    : null;
-  
-  // 🔴 [NEW] 디버그 로그
-  console.log(`[ScenarioBubble] Render for sessionId: ${scenarioSessionId}`, {
-    hasActiveScenario: !!activeScenario,
-    messagesCount: activeScenario?.messages?.length,
-    status: activeScenario?.status,
-    firstMessage: activeScenario?.messages?.[0],
-  });
   
   const isCompleted =
     activeScenario?.status === "completed" ||

@@ -26,7 +26,27 @@ import {
 
 export default function ScenarioChat() {
   const activeScenarioSessionId = useChatStore((state) => state.activeScenarioSessionId);
-  const scenarioStates = useChatStore((state) => state.scenarioStates);
+  
+  // ✅ [최적화] selector를 사용하여 특정 시나리오 상태만 구독
+  // 다른 시나리오의 상태 변경 시 이 컴포넌트는 리렌더링되지 않음
+  const activeScenario = useChatStore(
+    (state) => activeScenarioSessionId ? state.scenarioStates[activeScenarioSessionId] : null,
+    (prev, next) => {
+      // 깊은 비교를 통해 불필요한 리렌더링 방지
+      if (prev === next) return true;
+      if (!prev || !next) return prev === next;
+      // 실제로 변경된 데이터만 비교
+      return (
+        prev.messages?.length === next.messages?.length &&
+        prev.status === next.status &&
+        prev.isLoading === next.isLoading &&
+        prev.state?.current_node_id === next.state?.current_node_id &&
+        JSON.stringify(prev.slots) === JSON.stringify(next.slots) &&
+        prev.title === next.title
+      );
+    }
+  );
+  
   const handleScenarioResponse = useChatStore((state) => state.handleScenarioResponse);
   const endScenario = useChatStore((state) => state.endScenario);
   const setActivePanel = useChatStore((state) => state.setActivePanel);
@@ -36,9 +56,6 @@ export default function ScenarioChat() {
   const setScenarioSlots = useChatStore((state) => state.setScenarioSlots);
   const { t, language } = useTranslations();
 
-  const activeScenario = activeScenarioSessionId
-    ? scenarioStates[activeScenarioSessionId]
-    : null;
   const isCompleted =
     activeScenario?.status === "completed" ||
     activeScenario?.status === "failed" ||
@@ -48,16 +65,6 @@ export default function ScenarioChat() {
   const currentScenarioNodeId = activeScenario?.state?.current_node_id;
   const scenarioId = activeScenario?.scenario_id;
   const currentSlots = activeScenario?.slots || {};
-
-  // 🔴 [NEW] 디버그 로그
-  console.log(`[ScenarioChat] activeScenario:`, {
-    activeScenarioSessionId,
-    hasActiveScenario: !!activeScenario,
-    messagesCount: scenarioMessages.length,
-    messages: scenarioMessages,
-    currentNodeId: currentScenarioNodeId,
-    status: activeScenario?.status,
-  });
 
   // [리팩토링] 커스텀 스크롤 훅 사용 (ref 및 effect 로직 대체)
   const { scrollRef } = useAutoScroll(scenarioMessages, isScenarioLoading);

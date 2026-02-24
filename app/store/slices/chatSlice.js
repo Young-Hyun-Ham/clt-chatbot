@@ -90,6 +90,53 @@ export const createChatSlice = (set, get) => {
           isLoading: false,
           hasMoreMessages: false, // API 페이징 미구현 시 false 처리
         });
+        
+        // 🔴 [NEW] 시나리오 세션이 있는 메시지에 대해 시나리오 상태 로드
+        const scenarioSessionIds = mappedMessages
+          .filter(msg => msg.scenarioSessionId)
+          .map(msg => msg.scenarioSessionId);
+        
+        if (scenarioSessionIds.length > 0) {
+          console.log(`[loadInitialMessages] Found ${scenarioSessionIds.length} scenario sessions:`, scenarioSessionIds);
+          // 각 시나리오 세션 상태 로드
+          for (const sessionId of scenarioSessionIds) {
+            const existingScenario = get().scenarioStates?.[sessionId];
+            if (!existingScenario) {
+              // 시나리오 상태가 없으면 로드
+              try {
+                const scenarioResponse = await fetch(
+                  `${FASTAPI_BASE_URL}/conversations/${conversationId}/scenario-sessions/${sessionId}`,
+                  {
+                    method: "GET",
+                    headers: { "Content-Type": "application/json" }
+                  }
+                );
+                
+                if (scenarioResponse.ok) {
+                  const scenarioData = await scenarioResponse.json();
+                  const data = scenarioData.data || scenarioData;
+                  
+                  console.log(`[loadInitialMessages] Loaded scenario state for ${sessionId}:`, {
+                    status: data.status,
+                    messagesCount: data.messages?.length,
+                  });
+                  
+                  set(state => ({
+                    scenarioStates: {
+                      ...state.scenarioStates,
+                      [sessionId]: {
+                        ...data,
+                        activeScenarioSessionId: state.activeScenarioSessionId,
+                      }
+                    }
+                  }));
+                }
+              } catch (scenarioError) {
+                console.warn(`Failed to load scenario session ${sessionId}:`, scenarioError);
+              }
+            }
+          }
+        }
       } catch (error) {
         console.error("FastAPI loadInitialMessages error:", error);
         showEphemeralToast("Failed to load messages (API).", "error");
