@@ -5,6 +5,8 @@ import { locales } from "../../lib/locales";
 import { getErrorKey } from "../../lib/errorHandler";
 import { logger } from "../../lib/logger";
 import { FASTAPI_BASE_URL } from "../../lib/constants";
+import { evaluateCondition } from "../../lib/scenarioHelpers";
+import { getDeepValue, interpolateMessage } from "../../lib/chatbotEngine";
 
 // ✅ 헬퍼 함수: 노드 ID로 노드 찾기
 const getNodeById = (nodes, nodeId) => {
@@ -12,7 +14,7 @@ const getNodeById = (nodes, nodeId) => {
 };
 
 // ✅ 헬퍼 함수: 현재 노드에서 다음 노드 결정 (로컬 처리)
-const getNextNode = (nodes, edges, currentNodeId, sourceHandle = null) => {
+const getNextNode = (nodes, edges, currentNodeId, sourceHandle = null, slots = {}) => {
   if (!nodes || !edges || !currentNodeId) return null;
   
   // 현재 노드에서 출발하는 엣지 찾기
@@ -26,6 +28,53 @@ const getNextNode = (nodes, edges, currentNodeId, sourceHandle = null) => {
   console.log(`[getNextNode] Found ${outgoingEdges.length} outgoing edge(s) from node ${currentNodeId}`);
   console.log(`[getNextNode] sourceHandle provided: ${sourceHandle}`);
   console.log(`[getNextNode] Available edges:`, outgoingEdges.map(e => ({ source: e.source, sourceHandle: e.sourceHandle, target: e.target })));
+  
+  const sourceNode = getNodeById(nodes, currentNodeId);
+  
+  // --- 🔴 [NEW] Block A: LLM 노드 keyword 조건 분기 ---
+  if (sourceNode?.type === 'llm' && Array.isArray(sourceNode.data?.conditions) && sourceNode.data.conditions.length > 0) {
+    const llmOutput = String(slots[sourceNode.data.outputVar] || '').toLowerCase();
+    const matched = sourceNode.data.conditions.find(c => c.keyword && llmOutput.includes(String(c.keyword).toLowerCase()));
+    if (matched) {
+      console.log(`[getNextNode] LLM keyword matched: "${matched.keyword}"`);
+      const edge = outgoingEdges.find(e => e.sourceHandle === matched.id);
+      if (edge) {
+        const nextNode = getNodeById(nodes, edge.target);
+        console.log(`[getNextNode] Next node (LLM condition): ${nextNode?.id}`);
+        return nextNode;
+      }
+    }
+  }
+  
+  // --- 🔴 [NEW] Block B: Branch CONDITION 타입 조건 평가 ---
+  if (sourceNode?.type === 'branch' && sourceNode.data?.evaluationType === 'CONDITION') {
+    const conditions = sourceNode.data.conditions || [];
+    for (const condition of conditions) {
+      const slotValue = getDeepValue(slots, condition.slot);
+      const valueToCompare = condition.valueType === 'slot' ? getDeepValue(slots, condition.value) : condition.value;
+      if (evaluateCondition(slotValue, condition.operator, valueToCompare)) {
+        console.log(`[getNextNode] Branch CONDITION met: ${condition.slot} ${condition.operator} ${valueToCompare}`);
+        const condIdx = conditions.indexOf(condition);
+        const handleId = sourceNode.data.replies?.[condIdx]?.value;
+        if (handleId) {
+          const edge = outgoingEdges.find(e => e.sourceHandle === handleId);
+          if (edge) {
+            const nextNode = getNodeById(nodes, edge.target);
+            console.log(`[getNextNode] Next node (branch condition): ${nextNode?.id}`);
+            return nextNode;
+          }
+        }
+      }
+    }
+    // 조건 불일치 시 default 핸들
+    const defaultEdge = outgoingEdges.find(e => e.sourceHandle === 'default');
+    if (defaultEdge) {
+      console.log(`[getNextNode] Branch default handle matched`);
+      const nextNode = getNodeById(nodes, defaultEdge.target);
+      console.log(`[getNextNode] Next node (default): ${nextNode?.id}`);
+      return nextNode;
+    }
+  }
   
   // Case 1: 단순 흐름 (엣지가 1개)
   if (outgoingEdges.length === 1) {
@@ -70,7 +119,6 @@ const isInteractiveNode = (node) => {
   return (
     node.type === 'slotfilling' ||
     node.type === 'form' ||
-    node.type === 'branch' ||
     (node.type === 'branch' && node.data?.evaluationType !== 'CONDITION')
   );
 };
@@ -414,9 +462,14 @@ export const createScenarioHandlersSlice = (set, get) => ({
             });
         }
 
-        // ✅ [NEW] 프론트엔드에서 다음 노드 결정
+        // ✅ [NEW] formData가 있으면 먼저 슬롯에 병합
+        const updatedSlots = payload.formData 
+          ? { ...currentScenario.slots, ...payload.formData } 
+          : currentScenario.slots;
+        
+        // ✅ [NEW] 프론트엔드에서 다음 노드 결정 (slots 전달)
         console.log(`[handleScenarioResponse] Getting next node from currentNodeId: ${currentNodeId}`);
-        const nextNode = getNextNode(nodes, edges, currentNodeId, payload.sourceHandle);
+        const nextNode = getNextNode(nodes, edges, currentNodeId, payload.sourceHandle, updatedSlots);
         console.log(`[handleScenarioResponse] Result -> Current node: ${currentNodeId}, Next node: ${nextNode?.id || 'END'} (type: ${nextNode?.type})`);
 
         if (!nextNode) {
@@ -529,7 +582,8 @@ export const createScenarioHandlersSlice = (set, get) => ({
                         usr_id: user.uid,
                         messages: errorMessages,
                         status: 'failed',
-                        state: null
+                        state: null,
+                        slots: currentScenario.slots || {}
                     }),
                 }
             ).then(r => {
@@ -632,7 +686,7 @@ export const createScenarioHandlersSlice = (set, get) => ({
         }
         
         // ✅ 다음 노드가 없으면 시나리오 완료 처리
-        const nextNode = getNextNode(nodes, edges, currentNode.id);
+        const nextNode = getNextNode(nodes, edges, currentNode.id, null, currentScenario.slots);
         if (!nextNode) {
           console.log(`[continueScenarioIfNeeded] Last interactive node reached, completing scenario.`);
           set(state => {
@@ -759,7 +813,7 @@ export const createScenarioHandlersSlice = (set, get) => ({
           }
         }
         
-        const nextNode = getNextNode(nodes, edges, currentNode.id);
+        const nextNode = getNextNode(nodes, edges, currentNode.id, null, currentScenario.slots);
         if (nextNode) {
           console.log(`[continueScenarioIfNeeded] Next node from edge: ${nextNode.id}`);
           currentNode = nextNode;
@@ -779,7 +833,7 @@ export const createScenarioHandlersSlice = (set, get) => ({
           console.log(`[continueScenarioIfNeeded] Delay node, waiting ${delayMs}ms...`);
           await new Promise(resolve => setTimeout(resolve, delayMs));
           
-          const nextNode = getNextNode(nodes, edges, currentNode.id);
+          const nextNode = getNextNode(nodes, edges, currentNode.id, null, currentScenario.slots);
           if (nextNode) {
             console.log(`[continueScenarioIfNeeded] After delay, next node: ${nextNode.id}`);
             currentNode = nextNode;
@@ -814,7 +868,7 @@ export const createScenarioHandlersSlice = (set, get) => ({
             }
           }
           
-          const nextNode = getNextNode(nodes, edges, currentNode.id);
+          const nextNode = getNextNode(nodes, edges, currentNode.id, null, currentScenario.slots);
           if (nextNode) {
             console.log(`[continueScenarioIfNeeded] After setSlot, next node: ${nextNode.id}`);
             currentNode = nextNode;
@@ -900,7 +954,7 @@ export const createScenarioHandlersSlice = (set, get) => ({
     }
 
     // ✅ [NEW] 최종 상태 업데이트 (로컬 상태)
-    const nextNode = getNextNode(nodes, edges, currentNode.id);
+    const nextNode = getNextNode(nodes, edges, currentNode.id, null, currentScenario.slots);
     const isLastNode = !nextNode;
 
     const scenarioState = get().scenarioStates[scenarioSessionId];
@@ -955,7 +1009,10 @@ export const createScenarioHandlersSlice = (set, get) => ({
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            usr_id: user.uid,
+            ...payload
+          }),
         }
       );
 
