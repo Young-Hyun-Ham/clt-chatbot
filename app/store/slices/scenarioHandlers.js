@@ -306,6 +306,28 @@ export const createScenarioHandlersSlice = (set, get) => ({
 
       get().subscribeToScenarioSession(newScenarioSessionId);
 
+      // ✅ [NEW] scenariosForConversation에 새로운 시나리오 세션 추가 (목록 맨 아래)
+      set(state => {
+        const currentScenarios = state.scenariosForConversation?.[conversationId] || [];
+        const newScenarioInfo = {
+          id: newScenarioSessionId,
+          sessionId: newScenarioSessionId,
+          scenario_id: scenarioId,
+          scenarioId: scenarioId,
+          name: scenarioData.name,
+          title: scenarioData.name,
+          created_at: new Date().toISOString(),
+          status: 'active',
+        };
+        
+        return {
+          scenariosForConversation: {
+            ...state.scenariosForConversation,
+            [conversationId]: [...currentScenarios, newScenarioInfo],
+          },
+        };
+      });
+
       // ✅ [NEW] 프론트엔드에서 첫 번째 노드 결정
       const firstNodeId = scenarioData.start_node_id || scenarioData.nodes[0].id;
       const firstNode = getNodeById(scenarioData.nodes, firstNodeId);
@@ -517,7 +539,13 @@ export const createScenarioHandlersSlice = (set, get) => ({
           });
 
           // 🔴 [NEW] 완료 상태를 store에 업데이트
-          set(state => ({
+          set(state => {
+            // ✅ [NEW] scenariosForConversation도 함께 업데이트
+            const updatedScenarios = state.scenariosForConversation?.[currentConversationId]?.map(s => 
+              s.sessionId === scenarioSessionId ? { ...s, status: 'completed' } : s
+            ) || [];
+            
+            return {
               scenarioStates: {
                 ...state.scenarioStates,
                 [scenarioSessionId]: {
@@ -527,8 +555,13 @@ export const createScenarioHandlersSlice = (set, get) => ({
                   state: null,
                   isLoading: false,
                 }
-              }
-          }));
+              },
+              scenariosForConversation: {
+                ...state.scenariosForConversation,
+                [currentConversationId]: updatedScenarios,
+              },
+            };
+          });
 
           endScenario(scenarioSessionId, 'completed');
           return;
@@ -859,16 +892,27 @@ export const createScenarioHandlersSlice = (set, get) => ({
               type: 'scenario_message',
             });
             
-            set(state => ({
-              scenarioStates: {
-                ...state.scenarioStates,
-                [scenarioSessionId]: {
-                  ...state.scenarioStates[scenarioSessionId],
-                  messages,
-                  status: 'completed',
+            set(state => {
+              // ✅ [NEW] scenariosForConversation도 함께 업데이트
+              const updatedScenarios = state.scenariosForConversation?.[currentScenarioState.conversation_id]?.map(s => 
+                s.sessionId === scenarioSessionId ? { ...s, status: 'completed' } : s
+              ) || [];
+              
+              return {
+                scenarioStates: {
+                  ...state.scenarioStates,
+                  [scenarioSessionId]: {
+                    ...state.scenarioStates[scenarioSessionId],
+                    messages,
+                    status: 'completed',
+                  },
                 },
-              },
-            }));
+                scenariosForConversation: {
+                  ...state.scenariosForConversation,
+                  [currentScenarioState.conversation_id]: updatedScenarios,
+                },
+              };
+            });
           }
           
           isLoopActive = false;

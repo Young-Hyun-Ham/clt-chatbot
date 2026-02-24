@@ -239,9 +239,17 @@ export default function ConversationItem({
               onClick={(e) => e.stopPropagation()}
             />
           ) : (
-            <span className={styles.convoTitle}>
-              {convo.title || t("newChat")}
-            </span>
+            <div className={styles.convoTitleContainer}>
+              <span className={styles.convoTitle}>
+                {convo.title || t("newChat")}
+              </span>
+              {/* ✅ [NEW] 최신 시나리오 제목 표시 */}
+              {hasScenarios && filteredScenarios && filteredScenarios.length > 0 && (
+                <span className={styles.latestScenarioTitle}>
+                  {filteredScenarios[filteredScenarios.length - 1].name}
+                </span>
+              )}
+            </div>
           )}
         </div>
 
