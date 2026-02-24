@@ -420,8 +420,7 @@ export default function ScenarioChat() {
                           </div>
                         ) : msg.node?.type === "link" ? (
                           <div>
-                            <a
-                              href="#"
+                            <button
                               onClick={(e) => {
                                 e.preventDefault();
                                 openLinkThroughParent(
@@ -431,14 +430,16 @@ export default function ScenarioChat() {
                                   )
                                 );
                               }}
-                              target="_self"
-                              rel="noopener noreferrer"
-                              className={styles.linkNode}
-                            >
-                              {interpolateMessage(
-                                msg.node.data.display || msg.node.data.content,
+                              className={styles.linkButton}
+                              title={interpolateMessage(
+                                msg.node.data.content,
                                 activeScenario.slots
                               )}
+                            >
+                              <span>{interpolateMessage(
+                                msg.node.data.display || msg.node.data.content,
+                                activeScenario.slots
+                              )}</span>
                               <OpenInNewIcon
                                 style={{
                                   marginLeft: "4px",
@@ -447,7 +448,7 @@ export default function ScenarioChat() {
                                   height: "16px",
                                 }}
                               />
-                            </a>
+                            </button>
                           </div>
                         ) : (
                           <MarkdownRenderer

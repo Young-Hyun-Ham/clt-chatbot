@@ -929,6 +929,9 @@ export const createScenarioHandlersSlice = (set, get) => ({
             let isSuccess = false;
             let updatedSlots = { ...currentScenario.slots };
 
+            // ✅ [NEW] API 로딩 시작
+            get().setDelayLoading(true);
+
             // 단일 API 호출 처리
             const executeSingleApi = async (apiConfig) => {
               const targetUrl = buildApiUrl(apiConfig.url, apiConfig.method === 'GET' ? apiConfig.params : null, currentScenario.slots);
@@ -988,6 +991,9 @@ export const createScenarioHandlersSlice = (set, get) => ({
               updatedSlots['apiError'] = apiError.message;
               updatedSlots['apiFailed'] = true;
               isSuccess = false;
+            } finally {
+              // ✅ [NEW] API 로딩 종료
+              get().setDelayLoading(false);
             }
 
             // 슬롯 업데이트
