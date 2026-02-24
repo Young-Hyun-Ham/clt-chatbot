@@ -312,3 +312,5 @@ export const nodeHandlers = {
   'setSlot': handleSetSlotNode,
   'delay': handleDelayNode,
 };
+
+export { buildApiUrl, buildFetchOptions, interpolateObjectStrings };

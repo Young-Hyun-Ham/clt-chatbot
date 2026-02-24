@@ -7,6 +7,7 @@ import { logger } from "../../lib/logger";
 import { FASTAPI_BASE_URL } from "../../lib/constants";
 import { evaluateCondition } from "../../lib/scenarioHelpers";
 import { getDeepValue, interpolateMessage } from "../../lib/chatbotEngine";
+import { buildApiUrl, buildFetchOptions, interpolateObjectStrings } from "../../lib/nodeHandlers";
 
 // ✅ 헬퍼 함수: 노드 ID로 노드 찾기
 const getNodeById = (nodes, nodeId) => {
@@ -919,7 +920,109 @@ export const createScenarioHandlersSlice = (set, get) => ({
             break;
           }
         }
-        // API, LLM은 백엔드에서 처리
+        // ✅ [NEW] API 노드는 프론트엔드에서 직접 처리
+        else if (currentNode.type === 'api') {
+          console.log(`[continueScenarioIfNeeded] API node, executing directly...`);
+          
+          try {
+            const { method, url, headers, body, params, responseMapping, isMulti, apis } = currentNode.data;
+            let isSuccess = false;
+            let updatedSlots = { ...currentScenario.slots };
+
+            // 단일 API 호출 처리
+            const executeSingleApi = async (apiConfig) => {
+              const targetUrl = buildApiUrl(apiConfig.url, apiConfig.method === 'GET' ? apiConfig.params : null, currentScenario.slots);
+              const { options, debugBody } = buildFetchOptions(apiConfig.method, apiConfig.headers, apiConfig.body, currentScenario.slots);
+              
+              console.log(`[continueScenarioIfNeeded] API request:`, { url: targetUrl, method: apiConfig.method, body: debugBody });
+              
+              const response = await fetch(targetUrl, options);
+              const responseText = await response.text();
+
+              if (!response.ok) {
+                throw new Error(`API request failed: ${response.status}. URL: ${targetUrl}. Response: ${responseText}`);
+              }
+              
+              const result = responseText ? JSON.parse(responseText) : null;
+              console.log(`[continueScenarioIfNeeded] API response:`, result);
+              return { result, mapping: apiConfig.responseMapping };
+            };
+
+            // API 실행
+            try {
+              let results = [];
+              if (isMulti && Array.isArray(apis)) {
+                const settledResults = await Promise.allSettled(apis.map(api => executeSingleApi(api)));
+                const fulfilled = settledResults.filter(r => r.status === 'fulfilled').map(r => r.value);
+                const rejected = settledResults.filter(r => r.status === 'rejected');
+                if (rejected.length > 0) throw rejected[0].reason;
+                results = fulfilled;
+              } else if (!isMulti) {
+                const singleConfig = { url, method, headers, body, params, responseMapping };
+                results.push(await executeSingleApi(singleConfig));
+              } else {
+                throw new Error("Invalid API node configuration: isMulti is true but 'apis' array is missing.");
+              }
+
+              // 결과 매핑
+              const mappedSlots = {};
+              results.forEach(({ result, mapping }) => {
+                if (mapping && mapping.length > 0) {
+                  mapping.forEach(m => {
+                    if (m.slot && typeof m.slot === 'string' && m.slot.trim() !== '') {
+                      const value = getDeepValue(result, m.path);
+                      if (value !== undefined) {
+                        mappedSlots[m.slot] = value;
+                        console.log(`[continueScenarioIfNeeded] Mapped ${m.path} -> ${m.slot} = ${JSON.stringify(value)}`);
+                      }
+                    }
+                  });
+                }
+              });
+
+              updatedSlots = { ...updatedSlots, ...mappedSlots };
+              isSuccess = true;
+
+            } catch (apiError) {
+              console.error(`[continueScenarioIfNeeded] API execution error:`, apiError);
+              updatedSlots['apiError'] = apiError.message;
+              updatedSlots['apiFailed'] = true;
+              isSuccess = false;
+            }
+
+            // 슬롯 업데이트
+            set(state => ({
+              scenarioStates: {
+                ...state.scenarioStates,
+                [scenarioSessionId]: {
+                  ...state.scenarioStates[scenarioSessionId],
+                  slots: updatedSlots,
+                },
+              },
+            }));
+            currentScenario.slots = updatedSlots;
+
+            // 다음 노드 결정 (onSuccess/onError handle 사용)
+            const nextNode = getNextNode(nodes, edges, currentNode.id, isSuccess ? 'onSuccess' : 'onError', updatedSlots);
+            if (nextNode) {
+              currentNode = nextNode;
+              console.log(`[continueScenarioIfNeeded] After API (${isSuccess ? 'success' : 'error'}), next node: ${currentNode.id}`);
+            } else {
+              console.log(`[continueScenarioIfNeeded] No next node from API, stopping.`);
+              isLoopActive = false;
+              break;
+            }
+
+          } catch (error) {
+            console.error(`[continueScenarioIfNeeded] Error processing API node:`, error);
+            const { language, showEphemeralToast } = get();
+            const message = locales[language]?.['errorServer'] || 'API call failed.';
+            showEphemeralToast(message, 'error');
+            isLoopActive = false;
+            break;
+          }
+        }
+        // LLM은 백엔드에서 처리
         else {
           console.log(`[continueScenarioIfNeeded] Backend auto-passthrough node (${currentNode.type}), calling backend...`);
           
