@@ -107,6 +107,24 @@ export default function ConversationItem({
   const { hideCompletedScenarios, hideDelayInHours, activeScenarioSessionId } =
     useChatStore();
 
+  // 🔴 [NEW] filteredScenarios와 hasScenarios를 먼저 계산
+  const filteredScenarios = scenarios
+    ? scenarios.filter((s) => {
+        if (hideCompletedScenarios && s.status === "completed") {
+          const completedTime = s.updatedAt?.toDate?.() || s.updatedAt;
+          if (!completedTime) return false;
+
+          const now = new Date();
+          const hoursPassed = (now - completedTime) / (1000 * 60 * 60);
+
+          return hoursPassed < hideDelayInHours;
+        }
+        return true;
+      })
+    : null;
+
+  const hasScenarios = filteredScenarios && filteredScenarios.length > 0;
+
   useEffect(() => {
     if (isEditing) {
       inputRef.current?.focus();
@@ -125,6 +143,14 @@ export default function ConversationItem({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  // 🔴 [NEW] 대화가 활성화되고 시나리오가 있으면 자동으로 확장
+  useEffect(() => {
+    if (isActive && hasScenarios && !isExpanded) {
+      console.log(`[ConversationItem] Auto-expanding scenarios for ${convo.id}`);
+      onToggleExpand?.(convo.id);
+    }
+  }, [isActive, hasScenarios, isExpanded, convo.id, onToggleExpand]);
 
   const handleUpdate = () => {
     if (title.trim() && title.trim() !== convo.title) {
@@ -161,21 +187,6 @@ export default function ConversationItem({
     setIsMenuOpen(false);
   };
 
-  const filteredScenarios = scenarios
-    ? scenarios.filter((s) => {
-        if (hideCompletedScenarios && s.status === "completed") {
-          const completedTime = s.updatedAt?.toDate();
-          if (!completedTime) return false;
-
-          const now = new Date();
-          const hoursPassed = (now - completedTime) / (1000 * 60 * 60);
-
-          return hoursPassed < hideDelayInHours;
-        }
-        return true;
-      })
-    : null;
-
   return (
     <div className={styles.conversationItemWrapper}>
       <div
@@ -185,7 +196,6 @@ export default function ConversationItem({
         onClick={() => {
           if (isEditing) return;
           onClick(convo.id);
-          onToggleExpand?.(convo.id);
         }}
       >
         <div className={styles.convoMain}>
@@ -302,7 +312,7 @@ export default function ConversationItem({
                   >
                     {hasUnread && <div className={styles.unreadDot}></div>}
                     <span className={styles.scenarioTitle}>
-                      {scenario.scenarioId}
+                      {scenario.title || scenario.scenarioId}
                     </span>
                     {/* --- 👇 [수정] 컴포넌트 사용 --- */}
                     <ScenarioStatusBadge

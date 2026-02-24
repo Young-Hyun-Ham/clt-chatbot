@@ -98,6 +98,10 @@ export const createChatSlice = (set, get) => {
         
         if (scenarioSessionIds.length > 0) {
           console.log(`[loadInitialMessages] Found ${scenarioSessionIds.length} scenario sessions:`, scenarioSessionIds);
+          
+          // 시나리오 정보 배열
+          const scenariosList = [];
+          
           // 각 시나리오 세션 상태 로드
           for (const sessionId of scenarioSessionIds) {
             const existingScenario = get().scenarioStates?.[sessionId];
@@ -119,6 +123,17 @@ export const createChatSlice = (set, get) => {
                   console.log(`[loadInitialMessages] Loaded scenario state for ${sessionId}:`, {
                     status: data.status,
                     messagesCount: data.messages?.length,
+                    title: data.title,
+                  });
+                  
+                  // 시나리오 정보 배열에 추가
+                  scenariosList.push({
+                    sessionId: sessionId,
+                    scenarioId: data.scenario_id || sessionId,
+                    status: data.status,
+                    title: data.title,
+                    messages: data.messages || [],
+                    updatedAt: data.updated_at || new Date(),
                   });
                   
                   set(state => ({
@@ -134,7 +149,29 @@ export const createChatSlice = (set, get) => {
               } catch (scenarioError) {
                 console.warn(`Failed to load scenario session ${sessionId}:`, scenarioError);
               }
+            } else {
+              // 기존 시나리오 정보도 배열에 추가
+              const existingData = get().scenarioStates[sessionId];
+              scenariosList.push({
+                sessionId: sessionId,
+                scenarioId: existingData.scenario_id || sessionId,
+                status: existingData.status,
+                title: existingData.title,
+                messages: existingData.messages || [],
+                updatedAt: existingData.updated_at || new Date(),
+              });
             }
+          }
+          
+          // 🔴 [NEW] scenariosForConversation에 시나리오 목록 저장
+          if (scenariosList.length > 0) {
+            set(state => ({
+              scenariosForConversation: {
+                ...state.scenariosForConversation,
+                [conversationId]: scenariosList,
+              }
+            }));
+            console.log(`[loadInitialMessages] Updated scenariosForConversation for ${conversationId}:`, scenariosList);
           }
         }
       } catch (error) {
