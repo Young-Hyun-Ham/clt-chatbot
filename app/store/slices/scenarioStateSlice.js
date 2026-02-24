@@ -8,6 +8,7 @@ export const createScenarioStateSlice = (set, get) => ({
   scenarioCategories: [],
   availableScenarios: [],
   unsubscribeScenariosMap: {},
+  isDelayLoading: false,
 
   setScenarioSlots: (sessionId, newSlots) => {
     set(state => {
@@ -28,5 +29,9 @@ export const createScenarioStateSlice = (set, get) => ({
         }
       };
     });
+  },
+
+  setDelayLoading: (isLoading) => {
+    set({ isDelayLoading: isLoading });
   },
 });

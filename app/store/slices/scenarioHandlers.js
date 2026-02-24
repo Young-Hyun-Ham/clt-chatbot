@@ -851,7 +851,14 @@ export const createScenarioHandlersSlice = (set, get) => ({
         if (currentNode.type === 'delay') {
           const delayMs = currentNode.data?.duration || currentNode.data?.delay_ms || currentNode.data?.delayMs || 1000;
           console.log(`[continueScenarioIfNeeded] Delay node, waiting ${delayMs}ms...`);
+          
+          // ✅ [NEW] 딜레이 로딩 상태 시작
+          get().setDelayLoading(true);
+          
           await new Promise(resolve => setTimeout(resolve, delayMs));
+          
+          // ✅ [NEW] 딜레이 로딩 상태 종료
+          get().setDelayLoading(false);
           
           const nextNode = getNextNode(nodes, edges, currentNode.id, null, currentScenario.slots);
           if (nextNode) {

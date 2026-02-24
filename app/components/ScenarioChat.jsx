@@ -54,6 +54,7 @@ export default function ScenarioChat() {
   const isScenarioPanelExpanded = useChatStore((state) => state.isScenarioPanelExpanded);
   const toggleScenarioPanelExpanded = useChatStore((state) => state.toggleScenarioPanelExpanded);
   const setScenarioSlots = useChatStore((state) => state.setScenarioSlots);
+  const isDelayLoading = useChatStore((state) => state.isDelayLoading);
   const { t, language } = useTranslations();
 
   const isCompleted =
@@ -525,7 +526,7 @@ export default function ScenarioChat() {
         })
         )}
 
-        {isScenarioLoading && (
+        {(isScenarioLoading || isDelayLoading) && (
           <div className={styles.messageRow}>
             <div
               className={`GlassEffect ${styles.message} ${styles.botMessage}`}
