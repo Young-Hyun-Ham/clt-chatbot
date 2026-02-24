@@ -115,10 +115,15 @@ const isInteractiveNode = (node) => {
     const hasReplies = node.data?.replies && node.data.replies.length > 0;
     return hasReplies;
   }
+
+  // 🔴 [NEW] form 노드: chainNext가 true이면 자동 진행 가능 (non-interactive)
+  if (node.type === 'form') {
+    const hasChainNext = node.data?.chainNext === true;
+    return !hasChainNext; // chainNext가 있으면 interactive가 아님
+  }
   
   return (
     node.type === 'slotfilling' ||
-    node.type === 'form' ||
     (node.type === 'branch' && node.data?.evaluationType !== 'CONDITION')
   );
 };
@@ -504,6 +509,20 @@ export const createScenarioHandlersSlice = (set, get) => ({
               else return r.json();
           });
 
+          // 🔴 [NEW] 완료 상태를 store에 업데이트
+          set(state => ({
+              scenarioStates: {
+                ...state.scenarioStates,
+                [scenarioSessionId]: {
+                  ...state.scenarioStates[scenarioSessionId],
+                  messages: newMessages,
+                  status: 'completed',
+                  state: null,
+                  isLoading: false,
+                }
+              }
+          }));
+
           endScenario(scenarioSessionId, 'completed');
           return;
         }
@@ -546,12 +565,7 @@ export const createScenarioHandlersSlice = (set, get) => ({
             else return r.json();
         });
 
-        // ✅ [NEW] 다음 노드가 비대화형이면 자동 진행
-        if (!isInteractiveNode(nextNode)) {
-          await new Promise(resolve => setTimeout(resolve, 300));
-          await get().continueScenarioIfNeeded(nextNode, scenarioSessionId);
-        }
-
+        // 🔴 [NEW] 상태를 먼저 업데이트해야 continueScenarioIfNeeded에서 올바른 상태를 사용
         set(state => ({
             scenarioStates: {
               ...state.scenarioStates,
@@ -564,6 +578,12 @@ export const createScenarioHandlersSlice = (set, get) => ({
               }
             }
         }));
+
+        // ✅ [NEW] 다음 노드가 비대화형이면 자동 진행
+        if (!isInteractiveNode(nextNode)) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+          await get().continueScenarioIfNeeded(nextNode, scenarioSessionId);
+        }
 
     } catch (error) {
         console.error(`Error handling scenario response for ${scenarioSessionId}:`, error);
