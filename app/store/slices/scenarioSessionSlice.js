@@ -142,6 +142,22 @@ export const createScenarioSessionSlice = (set, get) => ({
     if (!user || !currentConversationId || !scenarioSessionId) return;
     
     try {
+        const currentScenario = get().scenarioStates[scenarioSessionId];
+        if (!currentScenario) return;
+
+        // 종료 메시지 결정
+        const messageKey = status === 'canceled' ? 'scenarioCanceled' : 'scenarioComplete';
+        const endMessage = locales[language]?.[messageKey] || 'Scenario has ended.';
+        
+        // 기존 메시지에 종료 메시지 추가
+        const messages = [...(currentScenario.messages || [])];
+        messages.push({
+          id: `bot-end-${Date.now()}`,
+          sender: 'bot',
+          text: endMessage,
+          type: 'scenario_message',
+        });
+
         // --- [수정] FastAPI로 업데이트 (정확한 경로: /conversations/{conversation_id}/scenario-sessions/{session_id}) ---
         await fetch(
             `${FASTAPI_BASE_URL}/conversations/${currentConversationId}/scenario-sessions/${scenarioSessionId}`,
@@ -151,7 +167,8 @@ export const createScenarioSessionSlice = (set, get) => ({
                 body: JSON.stringify({
                     usr_id: user.uid,
                     status: status,
-                    state: null
+                    state: null,
+                    messages: messages,
                 }),
             }
         ).then(r => {
@@ -162,8 +179,8 @@ export const createScenarioSessionSlice = (set, get) => ({
         
         set(state => {
             const updatedState = state.scenarioStates[scenarioSessionId]
-                ? { ...state.scenarioStates[scenarioSessionId], status: status, state: null } 
-                : { status: status, state: null }; 
+                ? { ...state.scenarioStates[scenarioSessionId], status: status, state: null, messages: messages } 
+                : { status: status, state: null, messages: messages }; 
 
             return {
                 scenarioStates: {

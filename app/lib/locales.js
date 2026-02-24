@@ -9,6 +9,10 @@ export const locales = {
     loading: "로딩 중...",
     copied: "복사되었습니다!",
 
+    // Scenario
+    scenarioComplete: "시나리오가 종료되었습니다.",
+    scenarioCanceled: "시나리오가 취소되었습니다.",
+
     // Error Messages
     errorNetwork: "네트워크 연결을 확인해주세요. 인터넷이 불안정한 것 같아요.",
     errorApiRequest: "API 요청에 실패했습니다. 네트워크 연결을 확인하거나 관리자에게 문의해주세요.",
@@ -232,6 +236,10 @@ export const locales = {
     logout: "Log Out",
     loading: "Loading...",
     copied: "Copied!",
+
+    // Scenario
+    scenarioComplete: "Scenario has ended.",
+    scenarioCanceled: "Scenario has been canceled.",
 
     // Error Messages
     errorApiRequest: "API request failed. Please check your network connection or contact an administrator.",

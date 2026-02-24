@@ -122,9 +122,12 @@ const isInteractiveNode = (node) => {
     return true; // form은 항상 interactive
   }
 
-  // ✅ branch 노드: 모두 non-interactive (조건만 자동 평가)
+  // ✅ branch 노드: evaluationType에 따라 구분
+  // - BUTTON, BUTTON_CLICK: interactive (사용자 클릭 필요)
+  // - SLOT_CONDITION, CONDITION: non-interactive (자동 평가)
   if (node.type === 'branch') {
-    return false;
+    const evalType = node.data?.evaluationType;
+    return evalType === 'BUTTON' || evalType === 'BUTTON_CLICK';
   }
   
   return node.type === 'slotfilling';
@@ -169,6 +172,7 @@ export const createScenarioHandlersSlice = (set, get) => ({
     }));
 
     try {
+        const currentScenario = get().scenarioStates[scenarioSessionId];
         await fetch(
             `${FASTAPI_BASE_URL}/conversations/${currentConversationId}/scenario-sessions/${scenarioSessionId}`,
             {
@@ -176,7 +180,8 @@ export const createScenarioHandlersSlice = (set, get) => ({
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     usr_id: user.uid,
-                    messages: updatedMessages
+                    messages: updatedMessages,
+                    state: currentScenario?.state || {},
                 }),
             }
         ).then(r => {
@@ -840,13 +845,40 @@ export const createScenarioHandlersSlice = (set, get) => ({
           console.log(`[continueScenarioIfNeeded] Next node from edge: ${nextNode.id}`);
           currentNode = nextNode;
         } else {
-          console.log(`[continueScenarioIfNeeded] No next node from edges, stopping.`);
+          console.log(`[continueScenarioIfNeeded] No next node from edges, scenario complete.`);
+          
+          // 🔴 [NEW] 시나리오 완료 메시지 추가
+          const currentScenarioState = get().scenarioStates[scenarioSessionId];
+          if (currentScenarioState) {
+            const messages = [...(currentScenarioState.messages || [])];
+            const { language } = get();
+            messages.push({
+              id: `bot-complete-${Date.now()}`,
+              sender: 'bot',
+              text: locales[language]?.scenarioComplete || 'Scenario has ended.',
+              type: 'scenario_message',
+            });
+            
+            set(state => ({
+              scenarioStates: {
+                ...state.scenarioStates,
+                [scenarioSessionId]: {
+                  ...state.scenarioStates[scenarioSessionId],
+                  messages,
+                  status: 'completed',
+                },
+              },
+            }));
+          }
+          
           isLoopActive = false;
           break;
         }
       }
-      // ✅ [NEW] Branch 노드 자동 평가 (CONDITION, SLOT_CONDITION 모두)
-      else if (currentNode.type === 'branch') {
+      // ✅ [NEW] Branch 노드 자동 평가 (CONDITION, SLOT_CONDITION만 - BUTTON/BUTTON_CLICK은 제외)
+      else if (currentNode.type === 'branch' && 
+               currentNode.data?.evaluationType !== 'BUTTON' && 
+               currentNode.data?.evaluationType !== 'BUTTON_CLICK') {
         console.log(`[continueScenarioIfNeeded] Branch node (${currentNode.data?.evaluationType}), auto-evaluating...`);
         
         // 조건 평가해서 다음 노드 결정
