@@ -118,15 +118,16 @@ const isInteractiveNode = (node) => {
   }
 
   // ✅ form 노드: 기본적으로 interactive (사용자 입력 필요)
-  // chainNext=true인 경우만 auto-passthrough됨
   if (node.type === 'form') {
     return true; // form은 항상 interactive
   }
+
+  // ✅ branch 노드: 모두 non-interactive (조건만 자동 평가)
+  if (node.type === 'branch') {
+    return false;
+  }
   
-  return (
-    node.type === 'slotfilling' ||
-    (node.type === 'branch' && node.data?.evaluationType !== 'CONDITION')
-  );
+  return node.type === 'slotfilling';
 };
 
 // ✅ 헬퍼 함수: 노드가 자동으로 진행되는 노드인지 판정
@@ -840,6 +841,21 @@ export const createScenarioHandlersSlice = (set, get) => ({
           currentNode = nextNode;
         } else {
           console.log(`[continueScenarioIfNeeded] No next node from edges, stopping.`);
+          isLoopActive = false;
+          break;
+        }
+      }
+      // ✅ [NEW] Branch 노드 자동 평가 (CONDITION, SLOT_CONDITION 모두)
+      else if (currentNode.type === 'branch') {
+        console.log(`[continueScenarioIfNeeded] Branch node (${currentNode.data?.evaluationType}), auto-evaluating...`);
+        
+        // 조건 평가해서 다음 노드 결정
+        const nextNode = getNextNode(nodes, edges, currentNode.id, null, currentScenario.slots);
+        if (nextNode) {
+          console.log(`[continueScenarioIfNeeded] Branch evaluated, next node: ${nextNode.id}`);
+          currentNode = nextNode;
+        } else {
+          console.log(`[continueScenarioIfNeeded] Branch: no next node, stopping.`);
           isLoopActive = false;
           break;
         }

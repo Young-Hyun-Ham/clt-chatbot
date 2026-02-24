@@ -455,8 +455,7 @@ export default function ScenarioChat() {
                             )}
                           />
                         )}
-                        {msg.node?.type === "branch" &&
-                          msg.node.data.replies && (
+                        {msg.node?.type === "branch" && (
                             <div className={styles.scenarioList}>
                               {msg.node.data.replies.map((reply) => {
                                 const selectedOption = msg.selectedOption;
