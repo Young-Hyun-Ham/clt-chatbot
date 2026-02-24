@@ -298,7 +298,7 @@ const FormRenderer = ({
     const renderedElements = [];
     let i = 0;
     const elements = node.data.elements || [];
-    // 💡 [수정] 'search'도 simple input 그룹에 포함
+    // 💡 [수정] 'search'도 simple input 그룹에 포함 (checkbox는 제외 - 복합 요소)
     const isSimpleInput = (el) =>
       el &&
       (el.type === "input" || el.type === "date" || el.type === "dropbox" || el.type === "search");
@@ -631,6 +631,7 @@ const FormRenderer = ({
                           display: "flex",
                           alignItems: "center",
                           gap: "8px",
+                          marginLeft: "0px",
                         }}
                       >
                         <input

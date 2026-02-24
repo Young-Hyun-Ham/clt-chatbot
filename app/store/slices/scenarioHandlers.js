@@ -117,10 +117,10 @@ const isInteractiveNode = (node) => {
     return hasReplies;
   }
 
-  // 🔴 [NEW] form 노드: chainNext가 true이면 자동 진행 가능 (non-interactive)
+  // ✅ form 노드: 기본적으로 interactive (사용자 입력 필요)
+  // chainNext=true인 경우만 auto-passthrough됨
   if (node.type === 'form') {
-    const hasChainNext = node.data?.chainNext === true;
-    return !hasChainNext; // chainNext가 있으면 interactive가 아님
+    return true; // form은 항상 interactive
   }
   
   return (

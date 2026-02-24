@@ -395,10 +395,7 @@ export default function ScenarioChat() {
                           <FormRenderer
                             node={msg.node}
                             onFormSubmit={handleFormSubmit}
-                            disabled={
-                              isCompleted ||
-                              msg.node.id !== currentScenarioNodeId
-                            }
+                            disabled={isCompleted}
                             language={language}
                             slots={currentSlots}
                             setScenarioSlots={setScenarioSlots}
