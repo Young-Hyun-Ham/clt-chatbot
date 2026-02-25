@@ -555,7 +555,8 @@ export const createChatSlice = (set, get) => {
 
       set((state) => ({ messages: [...state.messages, newMessage] }));
 
-      if (!newMessage.isStreaming) {
+      // /chat을 거치지 않는 메시지만 저장 (skipSave 플래그가 없을 때)
+      if (!newMessage.isStreaming && !messageData.skipSave) {
         await get().saveMessage(newMessage, null);
       }
     },

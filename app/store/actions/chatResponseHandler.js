@@ -19,13 +19,14 @@ const checkAndOpenUrl = (text) => {
 // responseHandlers는 이 스코프 내에서만 사용되므로 여기에 정의
 const responseHandlers = {
   scenario_list: (data, getFn) => {
-    getFn().addMessage("bot", { text: data.message, scenarios: data.scenarios });
+    getFn().addMessage("bot", { text: data.message, scenarios: data.scenarios, skipSave: true });
   },
   canvas_trigger: (data, getFn) => {
     getFn().addMessage("bot", {
       text:
         locales[getFn().language]?.scenarioStarted(data.scenarioId) ||
         `Starting '${data.scenarioId}'.`,
+      skipSave: true,
     });
     getFn().openScenarioPanel(data.scenarioId);
   },
@@ -34,7 +35,7 @@ const responseHandlers = {
   },
   text: (data, getFn) => {
     const responseText = data.message || data.text || data.content || "(No Content)";
-    getFn().addMessage("bot", { text: responseText });
+    getFn().addMessage("bot", { text: responseText, skipSave: true });
     checkAndOpenUrl(responseText);
     if (data.slots && Object.keys(data.slots).length > 0) {
       getFn().setExtractedSlots(data.slots);
@@ -46,6 +47,7 @@ const responseHandlers = {
         data.message ||
         locales[getFn().language]?.errorUnexpected ||
         "An error occurred.",
+      skipSave: true,
     });
   },
 };
@@ -264,7 +266,7 @@ export async function handleResponse(get, set, messagePayload) {
           checkAndOpenUrl(responseText);
 
           if (conversationIdForBotResponse === get().currentConversationId) {
-            await addMessage("bot", { text: responseText });
+            await addMessage("bot", { text: responseText, skipSave: true });
           } else {
             const botMessage = {
               id: `temp_${Date.now()}`,
@@ -287,6 +289,7 @@ export async function handleResponse(get, set, messagePayload) {
           );
           await addMessage("bot", {
             text: locales[language]?.["errorUnexpected"] || "(No content)",
+            skipSave: true,
           });
         }
       }
@@ -372,7 +375,7 @@ export async function handleResponse(get, set, messagePayload) {
         }
 
         // 말풍선이 없었다면(shouldShowBubble=false 였거나 제거된 경우) 새로 추가 (에러 메시지 표시)
-        addMessage("bot", { text: errorMessage });
+        addMessage("bot", { text: errorMessage, skipSave: true });
         const newSet = new Set(state.pendingResponses);
         newSet.delete(conversationIdForBotResponse);
         return { isLoading: false, pendingResponses: newSet };
