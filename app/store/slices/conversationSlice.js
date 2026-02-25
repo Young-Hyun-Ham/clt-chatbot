@@ -2,6 +2,12 @@
 import { locales } from "../../lib/locales";
 import { getErrorKey } from "../../lib/errorHandler";
 import { FASTAPI_BASE_URL } from "../../lib/constants";
+import {
+  fetchAllConversationsForUser,
+  fetchScenarioSessionsForConversation,
+  deleteScenarioSession,
+  deleteConversationFull
+} from "../../lib/api";
 
 export const createConversationSlice = (set, get) => ({
   // State
@@ -270,8 +276,6 @@ export const createConversationSlice = (set, get) => ({
 
         // 2. FastAPI를 통해 모든 대화 삭제
         // 2-1. 사용자의 모든 conversations 조회
-        const { fetchAllConversationsForUser, fetchScenarioSessionsForConversation, deleteScenarioSession, deleteConversationFull } = await import("../../lib/api");
-        
         const allConversations = await fetchAllConversationsForUser(user.uid);
         console.log(`[deleteAllConversations] Found ${allConversations.length} conversations for user ${user.uid}`);
 
@@ -288,12 +292,14 @@ export const createConversationSlice = (set, get) => ({
           for (const session of scenarioSessions) {
             const sessionId = session.id || session.session_id;
             console.log(`[deleteAllConversations] Deleting scenario session: ${sessionId}`);
-            await deleteScenarioSession(conversationId, sessionId, user.uid);
+            const deleteResult = await deleteScenarioSession(conversationId, sessionId, user.uid);
+            console.log(`[deleteAllConversations] Scenario session deletion result: ${deleteResult}`);
           }
 
           // 2-2-3. conversation 삭제
           console.log(`[deleteAllConversations] Deleting conversation: ${conversationId}`);
-          await deleteConversationFull(conversationId, user.uid);
+          const convDeleteResult = await deleteConversationFull(conversationId, user.uid);
+          console.log(`[deleteAllConversations] Conversation deletion result: ${convDeleteResult}`);
         }
 
         console.log("[deleteAllConversations] All conversations and scenario sessions deleted successfully via FastAPI.");

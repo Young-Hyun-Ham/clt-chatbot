@@ -491,7 +491,8 @@ export async function fetchAllConversationsForUser(userId) {
   const res = await fetch(url, { method: "GET", headers: getHeaders() });
   if (!res.ok) throw new Error(`Failed to fetch all conversations: ${res.status}`);
   const data = await res.json();
-  return data.conversations || [];
+  // API가 배열을 직접 반환하거나 conversations 필드에 포함해서 반환
+  return Array.isArray(data) ? data : (data.conversations || []);
 }
 
 // 특정 conversation의 모든 scenario-sessions 조회
