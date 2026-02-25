@@ -1,8 +1,7 @@
 // app/store/slices/conversationSlice.js
 import { locales } from "../../lib/locales";
 import { getErrorKey } from "../../lib/errorHandler";
-
-const FASTAPI_BASE_URL = "http://202.20.84.65:8083/api/v1"; // FastAPI 주소
+import { FASTAPI_BASE_URL } from "../../lib/constants";
 
 export const createConversationSlice = (set, get) => ({
   // State
@@ -41,7 +40,7 @@ export const createConversationSlice = (set, get) => ({
   },
 
   loadConversation: async (conversationId) => {
-    const { user, language, useFastApi, showEphemeralToast } = get();
+    const { user, language, showEphemeralToast } = get();
     if (
       !user ||
       get().currentConversationId === conversationId ||
@@ -101,7 +100,7 @@ export const createConversationSlice = (set, get) => ({
     get().resetMessages?.(get().language);
     get().setIsLoading?.(true);
 
-    const { language, user, showEphemeralToast, useFastApi } = get();
+    const { language, user, showEphemeralToast } = get();
     const title = locales[language]?.["newChat"] || "New Chat";
 
     try {
@@ -140,14 +139,13 @@ export const createConversationSlice = (set, get) => ({
   },
 
   deleteConversation: async (conversationId) => {
-    const { user, language, showEphemeralToast, useFastApi } = get();
+    const { user, language, showEphemeralToast } = get();
     if (!user || typeof conversationId !== "string" || !conversationId) {
       if (typeof conversationId !== "string" || !conversationId)
         console.error("deleteConversation invalid ID:", conversationId);
       return;
     }
 
-    // FastAPI를 통해 대화방 삭제
     try {
       const params = new URLSearchParams({
         usr_id: user.uid,
@@ -183,7 +181,7 @@ export const createConversationSlice = (set, get) => ({
   },
 
   updateConversationTitle: async (conversationId, newTitle) => {
-    const { user, language, showEphemeralToast, useFastApi } = get();
+    const { user, language, showEphemeralToast } = get();
     if (
       !user ||
       typeof conversationId !== "string" ||
@@ -197,34 +195,27 @@ export const createConversationSlice = (set, get) => ({
     }
     const trimmedTitle = newTitle.trim().substring(0, 100);
 
-    // --- 👇 [수정] FastAPI 사용 시 ---
-    if (useFastApi) {
-      try {
-        await fetch(`${FASTAPI_BASE_URL}/conversations/${conversationId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            usr_id: user.uid,
-            title: trimmedTitle,
-            ten_id: "1000",
-            stg_id: "DEV",
-            sec_ofc_id: "000025"
-          }),
-        });
-        await get().loadConversations(user.uid);
-      } catch (error) {
-        console.error("FastAPI updateConversationTitle error:", error);
-        showEphemeralToast("Failed to update title.", "error");
-      }
-      return;
+    try {
+      await fetch(`${FASTAPI_BASE_URL}/conversations/${conversationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          usr_id: user.uid,
+          title: trimmedTitle,
+          ten_id: "1000",
+          stg_id: "DEV",
+          sec_ofc_id: "000025"
+        }),
+      });
+      await get().loadConversations(user.uid);
+    } catch (error) {
+      console.error("updateConversationTitle error:", error);
+      showEphemeralToast("Failed to update title.", "error");
     }
-    // --- 👆 [수정] ---
-
-    // [임시] Firestore 모드는 비활성화
   },
 
   pinConversation: async (conversationId, pinned) => {
-    const { user, language, showEphemeralToast, useFastApi } = get();
+    const { user, language, showEphemeralToast } = get();
     if (
       !user ||
       typeof conversationId !== "string" ||
@@ -233,39 +224,27 @@ export const createConversationSlice = (set, get) => ({
     )
       return;
 
-    // --- 👇 [수정] FastAPI 사용 시 ---
-    if (useFastApi) {
-      try {
-        await fetch(`${FASTAPI_BASE_URL}/conversations/${conversationId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            usr_id: user.uid,
-            is_pinned: pinned,
-            ten_id: "1000",
-            stg_id: "DEV",
-            sec_ofc_id: "000025"
-          }),
-        });
-        await get().loadConversations(user.uid);
-      } catch (error) {
-        console.error("FastAPI pinConversation error:", error);
-        showEphemeralToast("Failed to update pin status.", "error");
-      }
-      return;
+    try {
+      await fetch(`${FASTAPI_BASE_URL}/conversations/${conversationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          usr_id: user.uid,
+          is_pinned: pinned,
+          ten_id: "1000",
+          stg_id: "DEV",
+          sec_ofc_id: "000025"
+        }),
+      });
+      await get().loadConversations(user.uid);
+    } catch (error) {
+      console.error("pinConversation error:", error);
+      showEphemeralToast("Failed to update pin status.", "error");
     }
-    // --- 👆 [수정] ---
-
-    // [임시] Firestore 모드는 비활성화
   },
 
   toggleConversationExpansion: (conversationId) => {
-    const {
-      expandedConversationId,
-      user,
-      language,
-      showEphemeralToast,
-    } = get();
+    const { expandedConversationId } = get();
 
     if (expandedConversationId === conversationId) {
       set({ expandedConversationId: null });
@@ -273,7 +252,6 @@ export const createConversationSlice = (set, get) => ({
     }
 
     set({ expandedConversationId: conversationId });
-    // [임시] FastAPI 모드에서는 시나리오 세션 조회가 필요하면 별도 API 호출 필요
   },
 
   deleteAllConversations: async () => {

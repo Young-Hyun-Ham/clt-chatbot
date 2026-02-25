@@ -14,8 +14,8 @@ import MoonIcon from "./icons/MoonIcon";
 import LogoIcon from "./icons/LogoIcon";
 import CopyIcon from "./icons/CopyIcon";
 import MarkdownRenderer from "./MarkdownRenderer";
-import LikeIcon from "./icons/LikeIcon";
-import DislikeIcon from "./icons/DislikeIcon";
+// import LikeIcon from "./icons/LikeIcon";
+// import DislikeIcon from "./icons/DislikeIcon";
 import mainMarkdownStyles from "./MainChatMarkdown.module.css";
 
 const ChartRenderer = dynamic(() => import("./ChartRenderer"), {
@@ -242,12 +242,12 @@ export default function Chat() {
   const selectedOptions = useChatStore((state) => state.selectedOptions);
   const setSelectedOption = useChatStore((state) => state.setSelectedOption);
   const dimUnfocusedPanels = useChatStore((state) => state.dimUnfocusedPanels);
-  const setMessageFeedback = useChatStore((state) => state.setMessageFeedback);
+  // const setMessageFeedback = useChatStore((state) => state.setMessageFeedback);
   const showScenarioBubbles = useChatStore((state) => state.showScenarioBubbles);
   
   const [copiedMessageId, setCopiedMessageId] = useState(null);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
-  const [animatedButton, setAnimatedButton] = useState(null);
+  // const [animatedButton, setAnimatedButton] = useState(null);
   const containerRef = useRef(null);
   const { t } = useTranslations();
 
@@ -381,13 +381,13 @@ export default function Chat() {
     });
   };
 
-  const handleFeedbackClick = (messageId, type) => {
-    setAnimatedButton({ messageId, type });
-    setMessageFeedback(messageId, type);
-    setTimeout(() => {
-      setAnimatedButton(null);
-    }, 300);
-  };
+  // const handleFeedbackClick = (messageId, type) => {
+  //   setAnimatedButton({ messageId, type });
+  //   setMessageFeedback(messageId, type);
+  //   setTimeout(() => {
+  //     setAnimatedButton(null);
+  //   }, 300);
+  // };
 
   const hasMessages = messages.some((m) => m.id !== "initial");
 
@@ -463,7 +463,7 @@ export default function Chat() {
                 );
               } else {
                 const selectedOption = selectedOptions[msg.id];
-                const currentFeedback = msg.feedback || null;
+                // const currentFeedback = msg.feedback || null;
                 const isStreaming =
                   index === messages.length - 1 &&
                   msg.sender === "bot" &&
@@ -569,6 +569,9 @@ export default function Chat() {
                           >
                             <CopyIcon />
                           </button>
+                          {/* Feedback buttons disabled */}
+                          {false && (
+                          <>
                           <button
                             className={`${styles.actionButton} ${
                               currentFeedback === "like"
@@ -601,6 +604,8 @@ export default function Chat() {
                           >
                             <DislikeIcon />
                           </button>
+                          </>
+                          )}
                         </div>
                       )}
                     </div>

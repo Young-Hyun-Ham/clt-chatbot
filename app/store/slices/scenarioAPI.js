@@ -8,7 +8,6 @@ import { FASTAPI_BASE_URL } from "../../lib/constants";
 
 export const createScenarioAPISlice = (set, get) => ({
   loadAvailableScenarios: async () => {
-    // --- 👇 [수정] FastAPI only (Firestore 제거) ---
     try {
         const response = await fetch(`${FASTAPI_BASE_URL}/scenarios`);
         if (response.ok) {
@@ -84,7 +83,6 @@ export const createScenarioAPISlice = (set, get) => ({
         showEphemeralToast(message, "error");
         set({ availableScenarios: {} });
     }
-    // --- 👆 [수정] ---
   },
 
   loadScenarioCategories: async () => {

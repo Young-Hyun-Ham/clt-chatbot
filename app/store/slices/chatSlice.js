@@ -78,17 +78,27 @@ export const createChatSlice = (set, get) => {
           sender: msg.role === 'user' ? 'user' : 'bot', // role -> sender 변환
           text: msg.content, // content -> text 변환
           createdAt: msg.created_at,
-          type: msg.type, // 메시지 type 포함 (scenario_bubble 등)
-          // ✅ 백엔드에서 scenario_session_id 포함 예정
+          type: msg.type,
           scenarioSessionId: msg.scenario_session_id,
-          // 필요한 경우 추가 필드 매핑
+          scenarioId: msg.scenario_id,
+          ...(msg.scenarios && { scenarios: msg.scenarios }),
+          ...(msg.chart_data && { chartData: msg.chart_data }),
+          ...(msg.shortcuts && { shortcuts: msg.shortcuts }),
+          ...(msg.node && { node: msg.node }),
         }));
+
+        // selected_option 복원
+        const restoredSelectedOptions = {};
+        apiMessagesRaw.forEach((msg) => {
+          if (msg.selected_option) restoredSelectedOptions[msg.id] = msg.selected_option;
+        });
         
         // 초기 메시지와 합치기
         set({
           messages: [initialMessage, ...mappedMessages],
           isLoading: false,
           hasMoreMessages: false, // API 페이징 미구현 시 false 처리
+          selectedOptions: restoredSelectedOptions,
         });
         
         // 🔴 [NEW] 시나리오 세션이 있는 메시지에 대해 시나리오 상태 로드
@@ -273,71 +283,8 @@ export const createChatSlice = (set, get) => {
       }
     },
 
-    setMessageFeedback: async (messageId, feedbackType) => {
-      const { user, language, showEphemeralToast, currentConversationId, messages } =
-        get();
-      if (!user || !currentConversationId || !messageId) {
-        console.warn(
-          "[setMessageFeedback] Missing user, conversationId, or messageId."
-        );
-        return;
-      }
-
-      const messageIndex = messages.findIndex((m) => m.id === messageId);
-      if (messageIndex === -1) {
-        console.warn(`[setMessageFeedback] Message not found: ${messageId}`);
-        return;
-      }
-
-      const message = messages[messageIndex];
-      const originalFeedback = message.feedback || null;
-      const newFeedback = originalFeedback === feedbackType ? null : feedbackType;
-
-      const updatedMessages = [...messages];
-      updatedMessages[messageIndex] = { ...message, feedback: newFeedback };
-      set({ messages: updatedMessages });
-
-      try {
-        // FastAPI를 통해 메시지 피드백 업데이트
-        const response = await fetch(`${FASTAPI_BASE_URL}/conversations/${currentConversationId}/messages/${messageId}/feedback`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            feedback: newFeedback,
-            usr_id: user.uid,
-            ten_id: "1000",
-            stg_id: "DEV",
-            sec_ofc_id: "000025"
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to update feedback: ${response.statusText}`);
-        }
-
-        console.log(`Feedback set to '${newFeedback}' for message ${messageId}`);
-      } catch (error) {
-        console.error("Error updating message feedback via API:", error);
-        const errorKey = getErrorKey(error);
-        const errorMessage =
-          locales[language]?.[errorKey] ||
-          locales["en"]?.errorUnexpected ||
-          "Failed to save feedback.";
-        showEphemeralToast(errorMessage, "error");
-
-        const rollbackMessages = [...get().messages];
-        const rollbackMessageIndex = rollbackMessages.findIndex(
-          (m) => m.id === messageId
-        );
-        if (rollbackMessageIndex !== -1) {
-          rollbackMessages[rollbackMessageIndex] = {
-            ...rollbackMessages[rollbackMessageIndex],
-            feedback: originalFeedback,
-          };
-          set({ messages: rollbackMessages });
-        }
-      }
-    },
+    // setMessageFeedback: async (messageId, feedbackType) => { /* 피드백 기능 비활성화 */ },
+    setMessageFeedback: () => {},  // 비활성화됨
 
     setExtractedSlots: (newSlots) => {
       console.log("[ChatStore] Setting extracted slots:", newSlots);
@@ -480,6 +427,21 @@ export const createChatSlice = (set, get) => {
               type: messageToSave.type || "text",
               ...(messageToSave.scenarioSessionId && {
                 scenario_session_id: messageToSave.scenarioSessionId,
+              }),
+              ...(messageToSave.scenarioId && {
+                scenario_id: messageToSave.scenarioId,
+              }),
+              ...(messageToSave.scenarios && {
+                scenarios: messageToSave.scenarios,
+              }),
+              ...(messageToSave.chartData && {
+                chart_data: messageToSave.chartData,
+              }),
+              ...(messageToSave.shortcuts && {
+                shortcuts: messageToSave.shortcuts,
+              }),
+              ...(messageToSave.node && {
+                node: messageToSave.node,
               }),
             }),
           }

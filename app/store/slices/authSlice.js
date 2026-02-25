@@ -17,24 +17,20 @@ export const createAuthSlice = (set, get) => ({
       isTestUser: true,
     };
     
-    // --- 👇 [추가] localStorage에 저장 ---
     if (typeof window !== "undefined") {
       localStorage.setItem("testUser", JSON.stringify(mockUser));
       console.log(`[AuthSlice] Test user saved to localStorage: ${userId}`);
     }
-    // --- 👆 [추가] ---
     
     get().setUserAndLoadData(mockUser);
   },
 
   logout: async () => {
     try {
-      // --- 👇 [추가] localStorage에서 제거 ---
       if (typeof window !== "undefined") {
         localStorage.removeItem("testUser");
         console.log("[AuthSlice] Test user removed from localStorage");
       }
-      // --- 👆 [추가] ---
       
       // 테스트 유저만 사용 - 항상 clearUserAndData 실행
       get().clearUserAndData();
@@ -54,8 +50,7 @@ export const createAuthSlice = (set, get) => ({
       hideDelayInHours = 0,
       fontSizeDefault = "16px",
       isDevMode = false,
-      sendTextShortcutImmediately = false,
-      useFastApi = false; // [추가] 기본값 설정
+      sendTextShortcutImmediately = false;
 
     try {
       // localStorage에서 사용자 설정 로드
@@ -84,13 +79,6 @@ export const createAuthSlice = (set, get) => ({
           ? userSettings.sendTextShortcutImmediately
           : sendTextShortcutImmediately;
       
-      // --- 👇 [추가] useFastApi 로드 ---
-      useFastApi =
-        typeof userSettings.useFastApi === "boolean"
-          ? userSettings.useFastApi
-          : useFastApi;
-      // --- 👆 [추가] ---
-
     } catch (error) {
       console.error("Error loading settings from localStorage:", error);
       fontSize = localStorage.getItem("fontSize") || fontSize;
@@ -106,9 +94,6 @@ export const createAuthSlice = (set, get) => ({
         fontSizeDefault,
         isDevMode,
         sendTextShortcutImmediately,
-        // --- 👇 [추가] 상태 적용 ---
-        useFastApi,
-        // --- 👆 [추가] ---
       });
       get().resetMessages?.(language);
     }
@@ -148,9 +133,6 @@ export const createAuthSlice = (set, get) => ({
       fontSizeDefault: "16px",
       isDevMode: false,
       sendTextShortcutImmediately: false,
-      // --- 👇 [추가] 초기화 ---
-      useFastApi: false, 
-      // --- 👆 [추가] ---
       conversations: [],
       currentConversationId: null,
       expandedConversationId: null,

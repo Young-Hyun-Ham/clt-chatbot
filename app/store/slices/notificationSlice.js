@@ -216,7 +216,6 @@ export const createNotificationSlice = (set, get) => ({
     set({ isNotificationModalOpen: false, unsubscribeNotifications: null });
   },
 
-  // --- 👇 [추가] index.js에서 이동된 복합 액션 ---
   handleNotificationNavigation: async (notification) => {
     // 알림 클릭 시 대화 로드 및 스크롤 처리
     get().closeNotificationModal(); // uiSlice
@@ -233,5 +232,4 @@ export const createNotificationSlice = (set, get) => ({
       }
     }
   },
-  // --- 👆 [추가] ---
 });

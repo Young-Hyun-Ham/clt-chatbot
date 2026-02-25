@@ -4,11 +4,7 @@ import {
   processGeminiStream,
 } from "../../lib/streamProcessors";
 import { locales } from "../../lib/locales";
-
-// 자동 팝업을 트리거할 타겟 URL 정의
-const TARGET_AUTO_OPEN_URL = "http://172.20.130.91:9110/oceans/BPM_P1002.do?tenId=2000&stgId=TST&pgmNr=BKD_M3201";
-// FastAPI 서버 주소
-const FASTAPI_URL = "http://202.20.84.65:8083/api/v1/chat";
+import { FASTAPI_BASE_URL, TARGET_AUTO_OPEN_URL } from "../../lib/constants";
 
 // URL 포함 여부 확인 및 새 창 열기 헬퍼 함수
 const checkAndOpenUrl = (text) => {
@@ -43,17 +39,14 @@ const responseHandlers = {
       getFn().setExtractedSlots(data.slots);
     }
   },
-  // --- 👇 [추가] text 타입 (FastAPI용) 핸들러 ---
   text: (data, getFn) => {
     const responseText = data.message || data.text || data.content || "(No Content)";
     getFn().addMessage("bot", { text: responseText });
     checkAndOpenUrl(responseText);
-    // 슬롯이 있다면 업데이트 (FastAPI 응답에 slots가 포함된다면)
     if (data.slots && Object.keys(data.slots).length > 0) {
       getFn().setExtractedSlots(data.slots);
     }
   },
-  // --- 👆 [추가] ---
   error: (data, getFn) => {
     getFn().addMessage("bot", {
       text:
@@ -87,16 +80,11 @@ export async function handleResponse(get, set, messagePayload) {
     conversations,
     updateConversationTitle,
     setForceScrollToBottom,
-    // --- 👇 [추가] 설정값 가져오기 ---
-    useFastApi,
-    // --- 👆 [추가] ---
   } = get();
   
-  // --- 👇 [추가] 대화가 없으면 자동 생성 ---
   let conversationId = currentConversationId;
   if (!conversationId) {
-    console.log("[handleResponse] No conversation found. Creating new conversation...");
-    conversationId = await createNewConversation(true); // returnId=true로 새 대화 생성 후 ID 반환
+    conversationId = await createNewConversation(true);
     if (!conversationId) {
       console.error("[handleResponse] Failed to create new conversation");
       showEphemeralToast("Failed to create conversation.", "error");
@@ -104,7 +92,6 @@ export async function handleResponse(get, set, messagePayload) {
       return;
     }
   }
-  // --- 👆 [추가] ---
 
   const textForUser = messagePayload.displayText || messagePayload.text;
 
@@ -175,43 +162,23 @@ export async function handleResponse(get, set, messagePayload) {
   try {
     let response;
 
-    // --- 👇 [수정] FastAPI 사용 여부에 따른 분기 ---
-    if (useFastApi) {
-      console.log(`[handleResponse] Using FastAPI Backend: ${FASTAPI_URL}`);
-      response = await fetch(FASTAPI_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          usr_id: get().user.uid,
-          conversation_id: conversationIdForBotResponse,
-          content: messagePayload.text,
-          language: language || "ko",
-          type: "text",
-          slots: get().slots,
-          role: messagePayload.type || "user",
-          scenario_session_id: get().activeScenarioSessionId || null,
-          source_handle: messagePayload.sourceHandle || null,
-          current_node_id: messagePayload.currentNodeId || null,
-        }),
-        signal: controller.signal,
-      });
-    } else {
-      // 기존 Firebase API 호출
-      response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: { text: messagePayload.text },
-          scenarioState: null,
-          slots: get().slots,
-          language: language,
-          llmProvider: llmProvider,
-          flowiseApiUrl: get().flowiseApiUrl,
-        }),
-        signal: controller.signal,
-      });
-    }
-    // --- 👆 [수정] ---
+    response = await fetch(`${FASTAPI_BASE_URL}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        usr_id: get().user.uid,
+        conversation_id: conversationIdForBotResponse,
+        content: messagePayload.text,
+        language: language || "ko",
+        type: "text",
+        slots: get().slots,
+        role: messagePayload.type || "user",
+        scenario_session_id: get().activeScenarioSessionId || null,
+        source_handle: messagePayload.sourceHandle || null,
+        current_node_id: messagePayload.currentNodeId || null,
+      }),
+      signal: controller.signal,
+    });
 
     clearTimeout(timeoutId); // 응답 시작 시 타임아웃 해제
 
