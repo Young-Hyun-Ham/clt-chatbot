@@ -9,6 +9,8 @@ import { evaluateCondition } from "../../lib/scenarioHelpers";
 import { getDeepValue, interpolateMessage } from "../../lib/chatbotEngine";
 import { buildApiUrl, buildFetchOptions, interpolateObjectStrings } from "../../lib/nodeHandlers";
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 // ✅ 헬퍼 함수: 노드 ID로 노드 찾기
 const getNodeById = (nodes, nodeId) => {
   return nodes?.find(n => n.id === nodeId);
@@ -359,7 +361,7 @@ export const createScenarioHandlersSlice = (set, get) => ({
       });
 
       // ✅ [NEW] 상태 업데이트 완료 대기
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await sleep(100);
       const savedScenario = get().scenarioStates[newScenarioSessionId];
       console.log(`[openScenarioPanel] ✅ Saved scenario state:`, savedScenario);
 
@@ -374,7 +376,7 @@ export const createScenarioHandlersSlice = (set, get) => ({
       if (shouldAutoProgress) {
         const reason = isAutoPassthroughNode(firstNode) ? 'auto-passthrough' : 'no-replies';
         console.log(`[openScenarioPanel] First node should auto-progress (${reason}), continuing...`);
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await sleep(300);
         await get().continueScenarioIfNeeded(firstNode, newScenarioSessionId);
       } else {
         console.log(`[openScenarioPanel] First node is interactive (has replies), waiting for user.`);
@@ -605,7 +607,7 @@ export const createScenarioHandlersSlice = (set, get) => ({
 
         // ✅ [NEW] 다음 노드가 비대화형이면 자동 진행
         if (!isInteractiveNode(nextNode)) {
-          await new Promise(resolve => setTimeout(resolve, 300));
+          await sleep(300);
           await get().continueScenarioIfNeeded(nextNode, scenarioSessionId);
         }
 
@@ -920,21 +922,16 @@ export const createScenarioHandlersSlice = (set, get) => ({
           break;
         }
       }
-      // 2. 자동 처리 노드 (API, LLM 등은 백엔드에서 처리)
+      // 2. 자동 처리 노드 (delay, setSlot, api)
       else if (isAutoPassthroughNode(currentNode)) {
         console.log(`[continueScenarioIfNeeded] Auto-passthrough node (${currentNode.type}), processing...`);
         
         // 🔴 [NEW] Delay 노드는 프론트엔드에서 처리
         if (currentNode.type === 'delay') {
-          const delayMs = currentNode.data?.duration || currentNode.data?.delay_ms || currentNode.data?.delayMs || 1000;
-          console.log(`[continueScenarioIfNeeded] Delay node, waiting ${delayMs}ms...`);
+          console.log(`[continueScenarioIfNeeded] Delay node, waiting...`);
           
-          // ✅ [NEW] 딜레이 로딩 상태 시작
           get().setDelayLoading(true);
-          
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-          
-          // ✅ [NEW] 딜레이 로딩 상태 종료
+          await sleep(currentNode.data?.duration || currentNode.data?.delay_ms || currentNode.data?.delayMs || 1000);
           get().setDelayLoading(false);
           
           const nextNode = getNextNode(nodes, edges, currentNode.id, null, currentScenario.slots);
@@ -964,11 +961,8 @@ export const createScenarioHandlersSlice = (set, get) => ({
                 const key = assignment.key;
                 let value = assignment.value;
                 
-                // {{slotName}} 형식인 경우 현재 슬롯에서 가져오기
-                if (value && value.startsWith('{{') && value.endsWith('}}')) {
-                  const refSlotName = value.slice(2, -2);
-                  value = currentScenario.slots[refSlotName] || value;
-                }
+                // {{slotName}} 보간 처리 (interpolateMessage가 중첩 참조까지 처리)
+                value = interpolateMessage(value, currentScenario.slots);
                 
                 updatedSlots[key] = value;
                 console.log(`[continueScenarioIfNeeded] SetSlot updated: ${key} = ${value}`);
@@ -1104,62 +1098,6 @@ export const createScenarioHandlersSlice = (set, get) => ({
             break;
           }
         }
-        // LLM은 백엔드에서 처리
-        else {
-          console.log(`[continueScenarioIfNeeded] Backend auto-passthrough node (${currentNode.type}), calling backend...`);
-          
-          // ✅ [NEW] 백엔드에 이 노드 실행을 요청
-          try {
-            const { user, currentConversationId, language, showEphemeralToast } = get();
-            
-            const response = await fetch(`${FASTAPI_BASE_URL}/chat`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                usr_id: user.uid,
-                conversation_id: currentConversationId,
-                role: "user",
-                scenario_session_id: scenarioSessionId,
-                content: "",
-                type: "text",
-                language,
-                slots: currentScenario.slots || {},
-                source_handle: null,
-                current_node_id: currentNode.id,
-              }),
-            });
-
-            if (!response.ok) {
-              throw new Error(`Backend /chat failed: ${response.status}`);
-            }
-
-            const data = await response.json();
-            console.log(`[continueScenarioIfNeeded] Backend response for node ${currentNode.id}:`, data);
-
-            // 다음 노드 결정
-            const nextNodeId = data.nextNode?.id || data.next_node?.id;
-            if (nextNodeId) {
-              currentNode = getNodeById(nodes, nextNodeId);
-              if (!currentNode) {
-                console.warn(`[continueScenarioIfNeeded] Next node ${nextNodeId} not found, stopping.`);
-                isLoopActive = false;
-                break;
-              }
-            } else {
-              console.log(`[continueScenarioIfNeeded] No next node from backend, stopping.`);
-              isLoopActive = false;
-              break;
-            }
-          } catch (error) {
-            console.error(`[continueScenarioIfNeeded] Error processing backend auto-passthrough node:`, error);
-            const { language, showEphemeralToast, endScenario } = get();
-            const errorKey = getErrorKey(error);
-            const message = locales[language]?.[errorKey] || 'Scenario auto-continue failed.';
-            showEphemeralToast(message, 'error');
-            endScenario(scenarioSessionId, 'failed');
-            return;
-          }
-        }
       } else {
         // 그 외 노드는 진행 불가
         console.log(`[continueScenarioIfNeeded] Unknown node type (${currentNode.type}), stopping.`);
@@ -1168,7 +1106,7 @@ export const createScenarioHandlersSlice = (set, get) => ({
       }
 
       // 지연 처리 (UI 반응성 유지)
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await sleep(300);
     }
 
     if (loopCount >= MAX_LOOP_ITERATIONS) {

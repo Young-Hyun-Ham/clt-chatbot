@@ -2,8 +2,9 @@
 
 import { fetchScenario, fetchScenarios } from './api';
 import { locales } from './locales';
-import { nodeHandlers } from './nodeHandlers'; // nodeHandlers 임포트
+import { nodeHandlers } from './nodeHandlers';
 import { FASTAPI_BASE_URL, API_DEFAULTS } from './constants';
+import { evaluateCondition } from './scenarioHelpers';
 
 const SUPPORTED_SCHEMA_VERSION = "1.0";
 
@@ -105,44 +106,6 @@ export const getScenario = async (scenarioId) => {
     return scenarioData;
 };
 
-const evaluateCondition = (slotValue, operator, conditionValue) => {
-    const lowerCaseConditionValue = String(conditionValue ?? '').toLowerCase(); // null/undefined 방지
-    const boolConditionValue = lowerCaseConditionValue === 'true';
-    // slotValue도 null/undefined일 수 있으므로 안전하게 문자열 변환
-    const boolSlotValue = String(slotValue ?? '').toLowerCase() === 'true';
-
-    if (lowerCaseConditionValue === 'true' || lowerCaseConditionValue === 'false') {
-        switch (operator) {
-          case '==': return boolSlotValue === boolConditionValue;
-          case '!=': return boolSlotValue !== boolConditionValue;
-          default: return false; // 불리언 비교는 ==, != 만 지원
-        }
-    }
-
-    // 숫자 비교 전 유효성 검사 강화
-    const numSlotValue = slotValue !== null && slotValue !== undefined && slotValue !== '' ? parseFloat(slotValue) : NaN;
-    const numConditionValue = conditionValue !== null && conditionValue !== undefined && conditionValue !== '' ? parseFloat(conditionValue) : NaN;
-    const bothAreNumbers = !isNaN(numSlotValue) && !isNaN(numConditionValue);
-
-    switch (operator) {
-      // 동등 비교는 타입 변환 고려 (==), 엄격 비교(===)는 필요시 추가
-      case '==': return String(slotValue ?? '') == String(conditionValue ?? '');
-      case '!=': return String(slotValue ?? '') != String(conditionValue ?? '');
-      // 숫자 비교는 유효한 숫자인 경우에만 수행
-      case '>': return bothAreNumbers && numSlotValue > numConditionValue;
-      case '<': return bothAreNumbers && numSlotValue < numConditionValue;
-      case '>=': return bothAreNumbers && numSlotValue >= numConditionValue;
-      case '<=': return bothAreNumbers && numSlotValue <= numConditionValue;
-      // 문자열 포함 여부 비교 (slotValue가 문자열화 가능한지 확인)
-      case 'contains': return slotValue != null && String(slotValue).includes(String(conditionValue ?? ''));
-      case '!contains': return slotValue == null || !String(slotValue).includes(String(conditionValue ?? ''));
-      default:
-        console.warn(`Unsupported operator used in condition: ${operator}`);
-        return false;
-    }
-};
-
-
 export const getNextNode = (scenario, currentNodeId, sourceHandleId = null, slots = {}) => {
     if (!scenario || !Array.isArray(scenario.nodes) || !Array.isArray(scenario.edges)) {
         console.error("Invalid scenario object passed to getNextNode:", scenario);
@@ -212,15 +175,8 @@ export const getNextNode = (scenario, currentNodeId, sourceHandleId = null, slot
         if (nextEdge) console.log(`Source handle matched: ${sourceHandleId}, Edge: ${nextEdge.id}`);
     }
 
-    // 3. sourceHandleId가 없고, 조건 분기 노드의 default 핸들 없는 엣지 찾기 (Fallback)
-    if (!nextEdge && !sourceHandleId && sourceNode.type === 'branch') {
-        // 핸들 ID 없는 엣지 (Fallback)
-        nextEdge = scenario.edges.find(edge => edge.source === currentNodeId && !edge.sourceHandle);
-        if (nextEdge) console.log(`Branch no handle (fallback) matched, Edge: ${nextEdge.id}`);
-    }
-
-    // 4. 그 외 모든 노드 타입에서 핸들 ID 없는 엣지 찾기 (기본 경로)
-    if (!nextEdge && !sourceHandleId && sourceNode.type !== 'branch') { // branch 아닌 경우만
+    // 3. sourceHandleId 없고 핸들 없는 엣지 찾기 (branch fallback / 기본 경로 통합)
+    if (!nextEdge && !sourceHandleId) {
         nextEdge = scenario.edges.find(edge => edge.source === currentNodeId && !edge.sourceHandle);
         if (nextEdge) console.log(`Default edge (no handle) matched for node type ${sourceNode.type}, Edge: ${nextEdge.id}`);
     }
