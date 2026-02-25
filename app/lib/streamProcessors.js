@@ -154,27 +154,28 @@ export async function* processFlowiseStream(reader, decoder, language) {
           }
           // --- 👆 [유지] ---
         } else if (data.event === "token" && typeof data.data === "string") {
-          // --- 👇 [수정] 텍스트 yield 제거, 수집만 하도록 변경 ---
+          // 토큰 누적
           textChunk = data.data;
-          if (textChunk.trim().length > 0 && !thinkingMessageReplaced) {
-            // yield { type: "text", data: textChunk, replace: true }; // [제거]
-            thinkingMessageReplaced = true;
-          } else if (thinkingMessageReplaced) {
-            // yield { type: "text", data: textChunk, replace: false }; // [제거]
-          }
           collectedText += textChunk;
-          // --- 👆 [수정] ---
+          
+          // 실시간으로 누적된 텍스트 전달
+          if (textChunk.trim().length > 0) {
+            yield { type: "text", data: collectedText, replace: !thinkingMessageReplaced };
+            thinkingMessageReplaced = true;
+          }
         } else if (data.event === "chunk" && data.data?.response) {
-          // --- 👇 [수정] 텍스트 yield 제거, 수집만 하도록 변경 ---
+          // 청크 데이터 처리
           textChunk = data.data.response;
-          if (textChunk.trim().length > 0 && !thinkingMessageReplaced) {
-            // yield { type: "text", data: textChunk, replace: true }; // [제거]
-            thinkingMessageReplaced = true;
-          } else if (thinkingMessageReplaced) {
-            // yield { type: "text", data: textChunk, replace: false }; // [제거]
-          }
           collectedText += textChunk;
-          // --- 👆 [수정] ---
+          
+          // 실시간으로 누적된 텍스트 전달
+          if (textChunk.trim().length > 0) {
+            yield { type: "text", data: collectedText, replace: !thinkingMessageReplaced };
+            thinkingMessageReplaced = true;
+          }
+        } else if (data.event === "end" && data.data === "[DONE]") {
+          // 스트림 종료 신호
+          console.log("[Flowise Stream] Stream ended");
         }
       }
     } // end while

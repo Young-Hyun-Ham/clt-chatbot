@@ -172,20 +172,13 @@ export async function handleResponse(get, set, messagePayload) {
   try {
     let response;
 
-    response = await fetch(`${FASTAPI_BASE_URL}/chat`, {
+    response = await fetch(`${FASTAPI_BASE_URL}/chat/prediction`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        usr_id: get().user.uid,
-        conversation_id: conversationIdForBotResponse,
-        content: messagePayload.text,
-        language: language || "ko",
-        type: "text",
-        slots: get().slots,
-        role: messagePayload.type || "user",
-        scenario_session_id: get().activeScenarioSessionId || null,
-        source_handle: messagePayload.sourceHandle || null,
-        current_node_id: messagePayload.currentNodeId || null,
+        ten_id: "1000",
+        stg_id: "DEV",
+        question: messagePayload.text,
       }),
       signal: controller.signal,
     });
@@ -201,20 +194,13 @@ export async function handleResponse(get, set, messagePayload) {
 
     if (response.headers.get("Content-Type")?.includes("text/event-stream")) {
       isStream = true;
-      console.log("[handleResponse] Processing text/event-stream response.");
+      console.log("[handleResponse] Processing text/event-stream response from /chat/prediction.");
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let streamProcessor;
-
-      if (llmProvider === "gemini")
-        streamProcessor = processGeminiStream(reader, decoder);
-      else if (llmProvider === "flowise")
-        streamProcessor = processFlowiseStream(reader, decoder, language);
-      else
-        throw new Error(
-          `Unsupported LLM provider for streaming: ${llmProvider}`
-        );
+      
+      // processFlowiseStream 사용
+      const streamProcessor = processFlowiseStream(reader, decoder, language);
 
       for await (const result of streamProcessor) {
         if (conversationIdForBotResponse === get().currentConversationId) {
