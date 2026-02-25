@@ -180,12 +180,21 @@ export const createScenarioSessionSlice = (set, get) => ({
         set(state => {
             const updatedState = state.scenarioStates[scenarioSessionId]
                 ? { ...state.scenarioStates[scenarioSessionId], status: status, state: null, messages: messages } 
-                : { status: status, state: null, messages: messages }; 
+                : { status: status, state: null, messages: messages };
+
+            // --- [추가] scenariosForConversation도 함께 업데이트 ---
+            const updatedScenarios = state.scenariosForConversation?.[currentConversationId]?.map(s => 
+              s.sessionId === scenarioSessionId ? { ...s, status: status } : s
+            ) || [];
 
             return {
                 scenarioStates: {
                     ...state.scenarioStates,
                     [scenarioSessionId]: updatedState
+                },
+                scenariosForConversation: {
+                    ...state.scenariosForConversation,
+                    [currentConversationId]: updatedScenarios,
                 },
             };
         });
