@@ -175,20 +175,8 @@ export const getNextNode = (scenario, currentNodeId, sourceHandleId = null, slot
 
     let nextEdge = null; // 다음 엣지 초기화
 
-    // 1. LLM 노드의 조건부 분기 처리
-    if (sourceNode.type === 'llm' && Array.isArray(sourceNode.data.conditions) && sourceNode.data.conditions.length > 0) {
-        const llmOutput = String(slots[sourceNode.data.outputVar] || '').toLowerCase();
-        const matchedCondition = sourceNode.data.conditions.find(cond =>
-            cond.keyword && llmOutput.includes(String(cond.keyword).toLowerCase())
-        );
-        if (matchedCondition) {
-            nextEdge = scenario.edges.find(edge => edge.source === currentNodeId && edge.sourceHandle === matchedCondition.id);
-            if (nextEdge) console.log(`LLM condition matched: ${matchedCondition.keyword}, Edge: ${nextEdge.id}`);
-        }
-    }
-
-    // 2. 조건 분기(branch) 노드 처리
-    if (!nextEdge && sourceNode.type === 'branch' && sourceNode.data.evaluationType === 'CONDITION') {
+    // 1. 조건 분기(branch) 노드 처리
+    if (sourceNode.type === 'branch' && sourceNode.data.evaluationType === 'CONDITION') {
         const conditions = sourceNode.data.conditions || [];
         for (const condition of conditions) {
             // 조건 값 가져오기 (슬롯 값 또는 직접 입력 값)
@@ -216,7 +204,7 @@ export const getNextNode = (scenario, currentNodeId, sourceHandleId = null, slot
         // default도 없으면 아래 기본/fallback 엣지 로직으로 넘어감
     }
 
-    // 3. 명시적 sourceHandleId가 있는 엣지 찾기 (예: 버튼 클릭)
+    // 2. 명시적 sourceHandleId가 있는 엣지 찾기 (예: 버튼 클릭)
     if (!nextEdge && sourceHandleId) {
         nextEdge = scenario.edges.find(
           edge => edge.source === currentNodeId && edge.sourceHandle === sourceHandleId
@@ -224,7 +212,7 @@ export const getNextNode = (scenario, currentNodeId, sourceHandleId = null, slot
         if (nextEdge) console.log(`Source handle matched: ${sourceHandleId}, Edge: ${nextEdge.id}`);
     }
 
-    // 4. sourceHandleId가 없고, 조건 분기 노드의 default 핸들 없는 엣지 찾기 (Fallback)
+    // 3. sourceHandleId가 없고, 조건 분기 노드의 default 핸들 없는 엣지 찾기 (Fallback)
     if (!nextEdge && !sourceHandleId && sourceNode.type === 'branch') {
         // 핸들 ID 없는 엣지 (Fallback)
         nextEdge = scenario.edges.find(edge => edge.source === currentNodeId && !edge.sourceHandle);

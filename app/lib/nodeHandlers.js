@@ -1,5 +1,4 @@
 // app/lib/nodeHandlers.js
-import { getGeminiResponseWithSlots } from './gemini'; 
 import { getNextNode, interpolateMessage, getDeepValue } from './chatbotEngine';
 import { logger } from './logger';
 
@@ -219,25 +218,6 @@ async function handleApiNode(node, scenario, slots) {
     return { nextNode, slots: currentSlots, events: [] };
 }
 
-async function handleLlmNode(node, scenario, slots, language) {
-    const interpolatedPrompt = interpolateMessage(node.data.prompt, slots);
-    const geminiData = await getGeminiResponseWithSlots(interpolatedPrompt, language);
-    const llmResponseText = geminiData.response;
-    const extractedSlots = geminiData.slots || {};
-    let currentSlots = { ...slots };
-
-    if (extractedSlots && Object.keys(extractedSlots).length > 0) {
-        currentSlots = { ...currentSlots, ...extractedSlots };
-    }
-
-    if (node.data.outputVar) {
-        currentSlots[node.data.outputVar] = llmResponseText;
-    }
-
-    const nextNode = getNextNode(scenario, node.id, null, currentSlots);
-    return { nextNode, slots: currentSlots, events: [] };
-}
-
 async function handleBranchNode(node, scenario, slots) {
   if (node.data.evaluationType === 'CONDITION') {
     const nextNode = getNextNode(scenario, node.id, null, slots);
@@ -308,7 +288,6 @@ export const nodeHandlers = {
   'iframe': handleInteractiveNode,
   'link': handleLinkNode,
   'api': handleApiNode,
-  'llm': handleLlmNode,
   'setSlot': handleSetSlotNode,
   'delay': handleDelayNode,
 };

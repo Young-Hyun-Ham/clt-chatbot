@@ -57,28 +57,6 @@ export const findStartNode = (scenario) => {
 };
 
 /**
- * LLM 노드의 조건부 분기 엣지를 찾습니다.
- */
-export const findLlmConditionEdge = (scenario, sourceNode, currentNodeId, slots) => {
-  if (sourceNode.type !== 'llm' || !Array.isArray(sourceNode.data.conditions) || sourceNode.data.conditions.length === 0) {
-    return null;
-  }
-
-  const llmOutput = String(slots[sourceNode.data.outputVar] || '').toLowerCase();
-  const matchedCondition = sourceNode.data.conditions.find(cond =>
-    cond.keyword && llmOutput.includes(String(cond.keyword).toLowerCase())
-  );
-  
-  if (matchedCondition) {
-    const edge = scenario.edges.find(edge => edge.source === currentNodeId && edge.sourceHandle === matchedCondition.id);
-    if (edge) console.log(`LLM condition matched: ${matchedCondition.keyword}, Edge: ${edge.id}`);
-    return edge;
-  }
-  
-  return null;
-};
-
-/**
  * branch 노드의 조건부 분기 엣지를 찾습니다.
  */
 export const findBranchConditionEdge = (scenario, sourceNode, currentNodeId, slots) => {

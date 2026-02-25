@@ -32,13 +32,6 @@ const responseHandlers = {
   toast: (data, getFn) => {
     getFn().showEphemeralToast(data.message, data.toastType || "info");
   },
-  llm_response_with_slots: (data, getFn) => {
-    getFn().addMessage("bot", { text: data.message });
-    checkAndOpenUrl(data.message);
-    if (data.slots && Object.keys(data.slots).length > 0) {
-      getFn().setExtractedSlots(data.slots);
-    }
-  },
   text: (data, getFn) => {
     const responseText = data.message || data.text || data.content || "(No Content)";
     getFn().addMessage("bot", { text: responseText });

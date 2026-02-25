@@ -32,22 +32,7 @@ const getNextNode = (nodes, edges, currentNodeId, sourceHandle = null, slots = {
   
   const sourceNode = getNodeById(nodes, currentNodeId);
   
-  // --- 🔴 [NEW] Block A: LLM 노드 keyword 조건 분기 ---
-  if (sourceNode?.type === 'llm' && Array.isArray(sourceNode.data?.conditions) && sourceNode.data.conditions.length > 0) {
-    const llmOutput = String(slots[sourceNode.data.outputVar] || '').toLowerCase();
-    const matched = sourceNode.data.conditions.find(c => c.keyword && llmOutput.includes(String(c.keyword).toLowerCase()));
-    if (matched) {
-      console.log(`[getNextNode] LLM keyword matched: "${matched.keyword}"`);
-      const edge = outgoingEdges.find(e => e.sourceHandle === matched.id);
-      if (edge) {
-        const nextNode = getNodeById(nodes, edge.target);
-        console.log(`[getNextNode] Next node (LLM condition): ${nextNode?.id}`);
-        return nextNode;
-      }
-    }
-  }
-  
-  // --- 🔴 [NEW] Block B: Branch CONDITION 타입 조건 평가 ---
+  // --- 🔴 [NEW] Block A: Branch CONDITION 타입 조건 평가 ---
   if (sourceNode?.type === 'branch' && sourceNode.data?.evaluationType === 'CONDITION') {
     const conditions = sourceNode.data.conditions || [];
     for (const condition of conditions) {
@@ -140,8 +125,7 @@ const isAutoPassthroughNode = (node) => {
     node.type === 'setSlot' ||
     node.type === 'set-slot' ||
     node.type === 'delay' ||
-    node.type === 'api' ||
-    node.type === 'llm'
+    node.type === 'api'
   );
 };
 

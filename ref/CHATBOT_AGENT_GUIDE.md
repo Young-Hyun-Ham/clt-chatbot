@@ -142,29 +142,7 @@
 
 ---
 
-#### 5) **LLM Node**
-```javascript
-{
-  "type": "llm",
-  "data": {
-    "prompt": "사용자: {user_input}\n\nAI 응답:",
-    "outputVar": "llm_response",
-    "conditions": [
-      { "keyword": "yes", "nextNode": "handle-yes" }
-    ]
-  }
-}
-```
-
-**에이전트 처리:**
-1. 프롬프트 보간 (슬롯 값 대입)
-2. LLM 호출
-3. 응답을 outputVar 슬롯에 저장
-4. 조건 확인 후 해당 엣지 선택
-
----
-
-#### 6) **기타 노드**
+#### 5) **기타 노드**
 - **SetSlot**: 슬롯 값 설정
 - **Delay**: 지연 처리
 - **SlotFilling**: 슬롯 채우기 (사용자 입력)
@@ -347,7 +325,7 @@ function proceedToNextNode(sourceHandleId, sourceNodeId, updatedSlots) {
 - [ ] 시작 노드 결정 로직
 - [ ] 현재 노드 ID 추적
 - [ ] 슬롯(상태) 관리 (딕셔너리/맵)
-- [ ] 노드 타입별 처리 함수 (message, form, branch, api, llm)
+- [ ] 노드 타입별 처리 함수 (message, form, branch, api)
 - [ ] 엣지 추적 및 다음 노드 결정
 - [ ] 분기 처리 (BUTTON/CONDITION)
 - [ ] 메시지 보간 (슬롯 값 대입)
@@ -359,7 +337,6 @@ function proceedToNextNode(sourceHandleId, sourceNodeId, updatedSlots) {
 - [ ] 실행 이력 기록
 - [ ] 조건 평가 함수 (CONDITION 분기용)
 - [ ] API 호출 재시도 로직
-- [ ] LLM 호출 타임아웃
 
 ---
 
