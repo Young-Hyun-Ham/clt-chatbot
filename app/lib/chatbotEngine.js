@@ -219,7 +219,7 @@ export const getNextNode = (scenario, currentNodeId, sourceHandleId = null, slot
         if (nextEdge) console.log(`Branch no handle (fallback) matched, Edge: ${nextEdge.id}`);
     }
 
-    // 5. 그 외 모든 노드 타입에서 핸들 ID 없는 엣지 찾기 (기본 경로)
+    // 4. 그 외 모든 노드 타입에서 핸들 ID 없는 엣지 찾기 (기본 경로)
     if (!nextEdge && !sourceHandleId && sourceNode.type !== 'branch') { // branch 아닌 경우만
         nextEdge = scenario.edges.find(edge => edge.source === currentNodeId && !edge.sourceHandle);
         if (nextEdge) console.log(`Default edge (no handle) matched for node type ${sourceNode.type}, Edge: ${nextEdge.id}`);

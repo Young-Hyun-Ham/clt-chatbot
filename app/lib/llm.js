@@ -1,18 +1,8 @@
 // app/lib/llm.js
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { locales } from './locales'; // 오류 메시지를 위해 추가
-// --- 👇 [수정] getErrorKey 임포트 제거 (직접 키 사용) ---
-// import { getErrorKey } from './errorHandler';
+import { locales } from './locales';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
-
-// JSON 응답 전용 모델
-const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
-    generationConfig: {
-        responseMimeType: "application/json",
-    }
-});
 
 // 스트리밍 응답 전용 모델
 const streamingModel = genAI.getGenerativeModel({
@@ -166,69 +156,10 @@ ${shortcutList}
 
   } catch (error) {
     console.error("[getGeminiStreamingResponse] Gemini API Error:", error);
-    // --- 👇 [수정] Gemini API 오류 시 errorLLMFail 메시지 사용 ---
     const message = locales[language]?.['errorLLMFail'] || 'Failed to call Gemini API. Please try again later.';
     return {
         type: 'error',
         message: message
     };
-    // --- 👆 [수정] ---
-  }
-}
-
-// getGeminiResponseWithSlots 함수 (JSON 응답)
-export async function getGeminiResponseWithSlots(prompt, language = 'ko', shortcuts = []) {
-  try {
-    const languageInstruction = language === 'en'
-        ? "Please construct your 'response' field in English."
-        : "반드시 'response' 필드는 한국어로 작성해주세요.";
-
-    const shortcutList = shortcuts.length > 0
-      ? `Here is a list of available shortcuts the user can use:\n${JSON.stringify(shortcuts, null, 2)}`
-      : "There are no shortcuts available.";
-
-    const systemInstruction = `You are a powerful AI assistant that analyzes user input, extracts key information (slots), and generates a response. Your output MUST be a valid JSON object with two fields: "response" and "slots".
-
-1.  **Analyze the user's prompt**: Identify key entities like locations, dates, times, names, numbers, etc.
-2.  **Populate the "slots" object**: Create a key-value pair for each extracted entity. For example, if the user says "I want to go to Jeju Island on November 5th", the slots should be \`{ "destination": "Jeju Island", "date": "November 5th" }\`. If no specific entities are found, return an empty object \`{}\`.
-3.  **Generate the "response" string**:
-    * If the user's prompt is strongly related to a shortcut from the list below, recommend it using the format: "혹시 아래와 같은 기능이 필요하신가요?\\n\\n[BUTTON:{shortcut.title}]".
-    * If it relates to multiple shortcuts, use the format: "혹시 아래와 같은 기능이 필요하신가요?\\n[BUTTON:Shortcut 1]\\n\\n[BUTTON:Shortcut 2]".
-    * Otherwise, provide a general, helpful conversational response.
-4.  **Combine into a single JSON object** and return it.
-
-**Available Shortcuts**:
-${shortcutList}
-`;
-
-    const fullPrompt = `${systemInstruction}\n\n${languageInstruction}\n\nUser: ${prompt}`;
-
-    const result = await model.generateContent(fullPrompt);
-    const responseText = result.response.text();
-
-    // --- 👇 [수정] 응답 유효성 검사 및 오류 처리 추가 ---
-    try {
-        const parsedResponse = JSON.parse(responseText);
-        // "response" 필드가 문자열인지, "slots" 필드가 객체인지 기본적인 검사
-        if (typeof parsedResponse.response === 'string' && typeof parsedResponse.slots === 'object' && parsedResponse.slots !== null) {
-            return parsedResponse;
-        } else {
-            console.error("Gemini API returned invalid JSON structure:", responseText);
-            throw new Error("Invalid JSON structure received from LLM.");
-        }
-    } catch (parseError) {
-        console.error("Error parsing Gemini JSON response:", parseError, "Raw response:", responseText);
-        throw new Error("Failed to parse LLM response."); // 에러를 다시 던져서 상위 catch 블록에서 처리
-    }
-    // --- 👆 [수정] ---
-
-  } catch (error) {
-    console.error("Gemini API Error (getGeminiResponseWithSlots):", error);
-    // --- 👇 [수정] Gemini 오류 시 errorLLMFail 메시지 사용 ---
-    return {
-        response: locales[language]?.['errorLLMFail'] || "Sorry, there was a problem generating the response. Please try again later.",
-        slots: {}
-    };
-    // --- 👆 [수정] ---
   }
 }
