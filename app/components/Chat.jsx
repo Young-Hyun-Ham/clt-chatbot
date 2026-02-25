@@ -534,24 +534,27 @@ export default function Chat() {
                           />
                           {msg.sender === "bot" && msg.scenarios && (
                             <div className={styles.scenarioList}>
-                              {msg.scenarios.map((name) => {
-                                const isSelected = selectedOption === name;
+                              {msg.scenarios.map((scenario) => {
+                                // 시나리오가 객체인 경우 (ID 포함) 또는 문자열인 경우 모두 처리
+                                const scenarioId = typeof scenario === 'object' ? scenario.id : scenario;
+                                const scenarioName = typeof scenario === 'object' ? scenario.name : scenario;
+                                const isSelected = selectedOption === scenarioName;
                                 const isDimmed = selectedOption && !isSelected;
                                 return (
                                   <button
-                                    key={name}
+                                    key={scenarioId}
                                     className={`${styles.optionButton} ${
                                       isSelected ? styles.selected : ""
                                     } ${isDimmed ? styles.dimmed : ""}`}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setSelectedOption(msg.id, name);
-                                      openScenarioPanel(name);
+                                      setSelectedOption(msg.id, scenarioName);
+                                      openScenarioPanel(scenarioId); // ID 사용
                                     }}
                                     disabled={!!selectedOption}
                                   >
                                     <span className={styles.optionButtonText}>
-                                      {name}
+                                      {scenarioName}
                                     </span>
                                     <CheckCircle />
                                   </button>

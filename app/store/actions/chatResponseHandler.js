@@ -126,9 +126,24 @@ export async function handleResponse(get, set, messagePayload) {
     await updateConversationTitle(conversationIdForBotResponse, newTitle);
   }
 
-  // 말풍선 표시 여부 결정 (커스텀 액션 등은 숨김)
-  const isCustomAction = messagePayload.text === "GET_SCENARIO_LIST"; 
-  const shouldShowBubble = !isCustomAction;
+  // GET_SCENARIO_LIST 커스텀 액션 처리
+  if (messagePayload.text === "GET_SCENARIO_LIST") {
+    const availableScenarios = get().availableScenarios || {};
+    const scenarioList = Object.entries(availableScenarios).map(([id, title]) => ({
+      id,
+      name: title,
+    }));
+    
+    await addMessage("bot", {
+      text: locales[language]?.["selectScenario"] || "Select a scenario:",
+      scenarios: scenarioList, // 객체 배열로 전달 (ID 포함)
+    });
+    set({ isLoading: false });
+    return;
+  }
+
+  // 말풍선 표시 여부 결정
+  const shouldShowBubble = true;
 
   const thinkingText = locales[language]?.["statusRequesting"] || "Requesting...";
   const tempBotMessageId = `temp_pending_${conversationIdForBotResponse}`;

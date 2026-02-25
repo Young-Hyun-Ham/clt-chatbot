@@ -440,10 +440,7 @@ input:checked + .slider:before {
   --option-button-min-width: 160px;
   margin-top: 10px;
   display: grid;
-  grid-template-columns: repeat(
-    auto-fill,
-    minmax(var(--option-button-min-width, 160px), 1fr)
-  );
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
