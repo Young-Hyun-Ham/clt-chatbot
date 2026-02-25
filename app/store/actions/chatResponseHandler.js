@@ -105,7 +105,7 @@ export async function handleResponse(get, set, messagePayload) {
     (!currentConvo || currentConvo.title === defaultTitle);
 
   if (textForUser) {
-    await addMessage("user", { text: textForUser });
+    await addMessage("user", { text: textForUser, skipSave: true });
   }
 
   const conversationIdForBotResponse = conversationId;

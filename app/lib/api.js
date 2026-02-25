@@ -478,3 +478,52 @@ export async function markNotificationAsRead(notificationId) {
     return null;
   }
 }
+
+/**
+ * ==============================================================================
+ * 대화 삭제 관련 API (FastAPI 통합)
+ * ==============================================================================
+ */
+
+// 사용자의 모든 conversation 조회
+export async function fetchAllConversationsForUser(userId) {
+  const url = buildUrl(`/conversations`, { usr_id: userId, limit: 1000 });
+  const res = await fetch(url, { method: "GET", headers: getHeaders() });
+  if (!res.ok) throw new Error(`Failed to fetch all conversations: ${res.status}`);
+  const data = await res.json();
+  return data.conversations || [];
+}
+
+// 특정 conversation의 모든 scenario-sessions 조회
+export async function fetchScenarioSessionsForConversation(conversationId, userId) {
+  const url = buildUrl(`/conversations/${conversationId}/scenario-sessions`, { usr_id: userId });
+  const res = await fetch(url, { method: "GET", headers: getHeaders() });
+  if (!res.ok) {
+    console.warn(`Failed to fetch scenario sessions for conversation ${conversationId}: ${res.status}`);
+    return [];
+  }
+  const data = await res.json();
+  return data.scenario_sessions || [];
+}
+
+// 특정 conversation의 특정 scenario-session 삭제
+export async function deleteScenarioSession(conversationId, sessionId, userId) {
+  const url = buildUrl(`/conversations/${conversationId}/scenario-sessions/${sessionId}`, { usr_id: userId });
+  const res = await fetch(url, { method: "DELETE", headers: getHeaders() });
+  if (!res.ok) {
+    console.warn(`Failed to delete scenario session ${sessionId}: ${res.status}`);
+    return false;
+  }
+  return true;
+}
+
+// 특정 conversation 삭제
+export async function deleteConversationFull(conversationId, userId) {
+  const url = buildUrl(`/conversations/${conversationId}`, { usr_id: userId });
+  const res = await fetch(url, { method: "DELETE", headers: getHeaders() });
+  if (!res.ok) {
+    console.warn(`Failed to delete conversation ${conversationId}: ${res.status}`);
+    return false;
+  }
+  return true;
+}

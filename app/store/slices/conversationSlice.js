@@ -269,26 +269,38 @@ export const createConversationSlice = (set, get) => ({
         });
 
         // 2. FastAPI를 통해 모든 대화 삭제
-        const response = await fetch(`${FASTAPI_BASE_URL}/conversations/delete-all`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            usr_id: user.uid,
-            ten_id: "1000",
-            stg_id: "DEV",
-            sec_ofc_id: "000025"
-          }),
-        });
+        // 2-1. 사용자의 모든 conversations 조회
+        const { fetchAllConversationsForUser, fetchScenarioSessionsForConversation, deleteScenarioSession, deleteConversationFull } = await import("../../lib/api");
+        
+        const allConversations = await fetchAllConversationsForUser(user.uid);
+        console.log(`[deleteAllConversations] Found ${allConversations.length} conversations for user ${user.uid}`);
 
-        if (!response.ok) {
-          throw new Error(`Failed to delete all conversations: ${response.status}`);
+        // 2-2. 각 conversation에 대해 scenario-sessions 삭제 후 conversation 삭제
+        for (const conversation of allConversations) {
+          const conversationId = conversation.id || conversation.conversation_id;
+          console.log(`[deleteAllConversations] Processing conversation: ${conversationId}`);
+
+          // 2-2-1. 해당 conversation의 모든 scenario-sessions 조회
+          const scenarioSessions = await fetchScenarioSessionsForConversation(conversationId, user.uid);
+          console.log(`[deleteAllConversations] Found ${scenarioSessions.length} scenario sessions in conversation ${conversationId}`);
+
+          // 2-2-2. 각 scenario-session 삭제
+          for (const session of scenarioSessions) {
+            const sessionId = session.id || session.session_id;
+            console.log(`[deleteAllConversations] Deleting scenario session: ${sessionId}`);
+            await deleteScenarioSession(conversationId, sessionId, user.uid);
+          }
+
+          // 2-2-3. conversation 삭제
+          console.log(`[deleteAllConversations] Deleting conversation: ${conversationId}`);
+          await deleteConversationFull(conversationId, user.uid);
         }
 
-        console.log("All conversations deleted successfully via FastAPI.");
+        console.log("[deleteAllConversations] All conversations and scenario sessions deleted successfully via FastAPI.");
         showEphemeralToast(locales[language]?.deleteAllConvosSuccess || "All conversation history successfully deleted.", "success");
 
     } catch (error) {
-        console.error("Error deleting all conversations:", error);
+        console.error("[deleteAllConversations] Error deleting all conversations:", error);
         const errorKey = getErrorKey(error);
         const message =
           locales[language]?.[errorKey] ||

@@ -162,25 +162,6 @@ export default function PersonalSettingsPage() {
           </label>
         </div>
 
-        {/* --- 👇 [추가] FastAPI 사용 설정 --- */}
-        <div className={styles.settingItem} style={{ border: '1px solid #806bf5', backgroundColor: 'rgba(128, 107, 245, 0.05)' }}>
-          <label className={styles.settingLabel}>
-            <h3 style={{ color: '#634ce2' }}>FastAPI 백엔드 사용 (Experimental)</h3>
-            <p>
-              활성화 시, 기존 Firebase 백엔드 대신 Vercel에 배포된 FastAPI 서버를 사용합니다.
-            </p>
-          </label>
-          <label className={styles.switch}>
-            <input
-              type="checkbox"
-              checked={fastApiEnabled}
-              onChange={(e) => setFastApiEnabled(e.target.checked)}
-            />
-            <span className={styles.slider}></span>
-          </label>
-        </div>
-        {/* --- 👆 [추가] --- */}
-
         {/* 텍스트 숏컷 즉시 전송 설정 */}
         <div className={styles.settingItem}>
           <label className={styles.settingLabel}>
@@ -216,69 +197,6 @@ export default function PersonalSettingsPage() {
             className={styles.settingInput}
             min="0"
           />
-        </div>
-
-        {/* 완료된 시나리오 숨김 설정 */}
-        <div
-          className={`${styles.settingGroup} ${
-            hideCompleted ? styles.active : ""
-          }`}
-        >
-          <div className={styles.settingItem}>
-            <label className={styles.settingLabel}>
-              <h3>완료된 시나리오 숨김</h3>
-              <p>
-                대화 목록의 하위 메뉴에서 '완료' 상태인 시나리오를 숨깁니다.
-              </p>
-            </label>
-            <label className={styles.switch}>
-              <input
-                type="checkbox"
-                checked={hideCompleted}
-                onChange={(e) => setHideCompleted(e.target.checked)}
-              />
-              <span className={styles.slider}></span>
-            </label>
-          </div>
-          {hideCompleted && (
-            <div className={`${styles.settingItem} ${styles.subSettingItem}`}>
-              <label htmlFor="hide-delay" className={styles.settingLabel}>
-                <h4>숨김 지연 시간 (시간)</h4>
-                <p>
-                  완료된 시점을 기준으로, 설정된 시간 이후에 목록에서 숨깁니다.
-                  (0으로 설정 시 즉시 숨김)
-                </p>
-              </label>
-              <input
-                id="hide-delay"
-                type="number"
-                value={delayHours}
-                onChange={(e) => setDelayHours(e.target.value)}
-                className={styles.settingInput}
-                min="0"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* 폰트 크기 설정 */}
-        <div className={styles.settingGroup}>
-          <div className={styles.settingItem}>
-            <label htmlFor="font-size-default" className={styles.settingLabel}>
-              <h3>폰트 크기</h3>
-              <p>
-                'Large text' 모드 ON/OFF와 관계없이 적용될 폰트 크기입니다. (예: 16px,
-                1rem)
-              </p>
-            </label>
-            <input
-              id="font-size-default"
-              type="text"
-              value={defaultSize}
-              onChange={(e) => setDefaultSize(e.target.value)}
-              className={styles.settingInput}
-            />
-          </div>
         </div>
 
         {/* 저장 버튼 */}
