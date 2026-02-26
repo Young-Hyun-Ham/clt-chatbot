@@ -1,9 +1,10 @@
 // app/lib/chatbotEngine.js
 
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { fetchScenario, fetchScenarios } from './api';
 import { locales } from './locales';
-import { nodeHandlers } from './nodeHandlers'; // nodeHandlers 임포트
+import { nodeHandlers } from './nodeHandlers';
+import { FASTAPI_BASE_URL, API_DEFAULTS } from './constants';
+import { evaluateCondition } from './scenarioHelpers';
 
 const SUPPORTED_SCHEMA_VERSION = "1.0";
 
@@ -12,9 +13,9 @@ let lastFetchTime = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5분
 
 /**
- * Firestore의 'shortcut' 컬렉션에서 시나리오 카테고리 데이터를 가져옵니다.
+ * FastAPI의 /shortcut 엔드포인트에서 시나리오 카테고리 데이터를 가져옵니다.
  * 성능을 위해 5분 동안 캐시된 데이터를 사용합니다.
- * @returns {Promise<Array>} 시나리오 카테고리 배열
+ * @returns {Promise<Array>} 시나리오 카테고리 배열 (subCategories 포함)
  */
 export async function getScenarioCategories() {
   const now = Date.now();
@@ -23,20 +24,35 @@ export async function getScenarioCategories() {
   }
 
   try {
-    const shortcutRef = doc(db, "shortcut", "main");
-    const docSnap = await getDoc(shortcutRef);
+    const { TENANT_ID, STAGE_ID, SEC_OFC_ID } = API_DEFAULTS;
+    const params = new URLSearchParams({
+      ten_id: TENANT_ID,
+      stg_id: STAGE_ID,
+      sec_ofc_id: SEC_OFC_ID,
+    });
 
-    if (docSnap.exists() && docSnap.data().categories) {
-      cachedScenarioCategories = docSnap.data().categories;
+    const response = await fetch(`${FASTAPI_BASE_URL}/shortcut?${params.toString()}`);
+    
+    if (response.ok) {
+      const data = await response.json();
+      // --- [수정] 백엔드 명세에 따라 응답 처리 ---
+      // API 응답 구조: Array of ShortcutResponse 또는 단일 ShortcutResponse
+      // ShortcutResponse: { id, name, order, subCategories }
+      let categoryData = data;
+      if (!Array.isArray(data)) {
+        categoryData = [data];
+      }
+      
+      cachedScenarioCategories = categoryData;
       lastFetchTime = now;
+      console.log('[getScenarioCategories] FastAPI에서 로드 성공:', categoryData);
       return cachedScenarioCategories;
     } else {
-      console.warn("Shortcut document 'main' not found in Firestore. Returning empty array.");
-      return [];
+      throw new Error(`Failed with status ${response.status}`);
     }
   } catch (error) {
-    console.error("Error fetching scenario categories from Firestore:", error);
-    return []; // 오류 발생 시 빈 배열 반환
+    console.warn("Error fetching scenario categories from FastAPI:", error);
+    return [];
   }
 }
 
@@ -64,9 +80,13 @@ export async function findActionByTrigger(message) {
 }
 
 export const getScenarioList = async () => {
-  const scenariosCollection = collection(db, 'scenarios');
-  const querySnapshot = await getDocs(scenariosCollection);
-  return querySnapshot.docs.map(doc => doc.id);
+    const scenarios = await fetchScenarios();
+    if (!Array.isArray(scenarios)) return [];
+
+    // 백엔드가 [{id, title, ...}] 또는 [id, id, ...] 형태로 줄 수 있어 방어적으로 처리
+    return scenarios
+        .map((s) => (typeof s === 'string' ? s : s?.id))
+        .filter(Boolean);
 };
 
 export const getScenario = async (scenarioId) => {
@@ -74,62 +94,17 @@ export const getScenario = async (scenarioId) => {
   if (!scenarioId || typeof scenarioId !== 'string') {
       throw new Error(`Invalid scenario ID provided: ${scenarioId}`);
   }
-  const scenarioRef = doc(db, 'scenarios', scenarioId);
-  const scenarioSnap = await getDoc(scenarioRef);
-
-  if (scenarioSnap.exists()) {
-    const scenarioData = scenarioSnap.data(); // 데이터 가져오기
+    const scenarioData = await fetchScenario(scenarioId);
 
     // 스키마 버전 확인
-    if (!scenarioData.version || scenarioData.version !== SUPPORTED_SCHEMA_VERSION) {
-        console.warn(`Scenario "${scenarioId}" has unsupported schema version "${scenarioData.version}". Expected "${SUPPORTED_SCHEMA_VERSION}". Proceeding with caution.`);
+    if (!scenarioData?.version || scenarioData.version !== SUPPORTED_SCHEMA_VERSION) {
+        console.warn(
+            `Scenario "${scenarioId}" has unsupported schema version "${scenarioData?.version}". Expected "${SUPPORTED_SCHEMA_VERSION}". Proceeding with caution.`
+        );
     }
 
-    return scenarioData; // 시나리오 데이터 반환
-  } else {
-    // 시나리오를 찾지 못했을 때 더 명확한 에러 메시지
-    console.error(`Scenario with ID "${scenarioId}" not found in Firestore.`);
-    throw new Error(`Scenario with ID "${scenarioId}" not found!`);
-  }
+    return scenarioData;
 };
-
-const evaluateCondition = (slotValue, operator, conditionValue) => {
-    const lowerCaseConditionValue = String(conditionValue ?? '').toLowerCase(); // null/undefined 방지
-    const boolConditionValue = lowerCaseConditionValue === 'true';
-    // slotValue도 null/undefined일 수 있으므로 안전하게 문자열 변환
-    const boolSlotValue = String(slotValue ?? '').toLowerCase() === 'true';
-
-    if (lowerCaseConditionValue === 'true' || lowerCaseConditionValue === 'false') {
-        switch (operator) {
-          case '==': return boolSlotValue === boolConditionValue;
-          case '!=': return boolSlotValue !== boolConditionValue;
-          default: return false; // 불리언 비교는 ==, != 만 지원
-        }
-    }
-
-    // 숫자 비교 전 유효성 검사 강화
-    const numSlotValue = slotValue !== null && slotValue !== undefined && slotValue !== '' ? parseFloat(slotValue) : NaN;
-    const numConditionValue = conditionValue !== null && conditionValue !== undefined && conditionValue !== '' ? parseFloat(conditionValue) : NaN;
-    const bothAreNumbers = !isNaN(numSlotValue) && !isNaN(numConditionValue);
-
-    switch (operator) {
-      // 동등 비교는 타입 변환 고려 (==), 엄격 비교(===)는 필요시 추가
-      case '==': return String(slotValue ?? '') == String(conditionValue ?? '');
-      case '!=': return String(slotValue ?? '') != String(conditionValue ?? '');
-      // 숫자 비교는 유효한 숫자인 경우에만 수행
-      case '>': return bothAreNumbers && numSlotValue > numConditionValue;
-      case '<': return bothAreNumbers && numSlotValue < numConditionValue;
-      case '>=': return bothAreNumbers && numSlotValue >= numConditionValue;
-      case '<=': return bothAreNumbers && numSlotValue <= numConditionValue;
-      // 문자열 포함 여부 비교 (slotValue가 문자열화 가능한지 확인)
-      case 'contains': return slotValue != null && String(slotValue).includes(String(conditionValue ?? ''));
-      case '!contains': return slotValue == null || !String(slotValue).includes(String(conditionValue ?? ''));
-      default:
-        console.warn(`Unsupported operator used in condition: ${operator}`);
-        return false;
-    }
-};
-
 
 export const getNextNode = (scenario, currentNodeId, sourceHandleId = null, slots = {}) => {
     if (!scenario || !Array.isArray(scenario.nodes) || !Array.isArray(scenario.edges)) {
@@ -163,20 +138,8 @@ export const getNextNode = (scenario, currentNodeId, sourceHandleId = null, slot
 
     let nextEdge = null; // 다음 엣지 초기화
 
-    // 1. LLM 노드의 조건부 분기 처리
-    if (sourceNode.type === 'llm' && Array.isArray(sourceNode.data.conditions) && sourceNode.data.conditions.length > 0) {
-        const llmOutput = String(slots[sourceNode.data.outputVar] || '').toLowerCase();
-        const matchedCondition = sourceNode.data.conditions.find(cond =>
-            cond.keyword && llmOutput.includes(String(cond.keyword).toLowerCase())
-        );
-        if (matchedCondition) {
-            nextEdge = scenario.edges.find(edge => edge.source === currentNodeId && edge.sourceHandle === matchedCondition.id);
-            if (nextEdge) console.log(`LLM condition matched: ${matchedCondition.keyword}, Edge: ${nextEdge.id}`);
-        }
-    }
-
-    // 2. 조건 분기(branch) 노드 처리
-    if (!nextEdge && sourceNode.type === 'branch' && sourceNode.data.evaluationType === 'CONDITION') {
+    // 1. 조건 분기(branch) 노드 처리
+    if (sourceNode.type === 'branch' && sourceNode.data.evaluationType === 'CONDITION') {
         const conditions = sourceNode.data.conditions || [];
         for (const condition of conditions) {
             // 조건 값 가져오기 (슬롯 값 또는 직접 입력 값)
@@ -204,7 +167,7 @@ export const getNextNode = (scenario, currentNodeId, sourceHandleId = null, slot
         // default도 없으면 아래 기본/fallback 엣지 로직으로 넘어감
     }
 
-    // 3. 명시적 sourceHandleId가 있는 엣지 찾기 (예: 버튼 클릭)
+    // 2. 명시적 sourceHandleId가 있는 엣지 찾기 (예: 버튼 클릭)
     if (!nextEdge && sourceHandleId) {
         nextEdge = scenario.edges.find(
           edge => edge.source === currentNodeId && edge.sourceHandle === sourceHandleId
@@ -212,15 +175,8 @@ export const getNextNode = (scenario, currentNodeId, sourceHandleId = null, slot
         if (nextEdge) console.log(`Source handle matched: ${sourceHandleId}, Edge: ${nextEdge.id}`);
     }
 
-    // 4. sourceHandleId가 없고, 조건 분기 노드의 default 핸들 없는 엣지 찾기 (Fallback)
-    if (!nextEdge && !sourceHandleId && sourceNode.type === 'branch') {
-        // 핸들 ID 없는 엣지 (Fallback)
-        nextEdge = scenario.edges.find(edge => edge.source === currentNodeId && !edge.sourceHandle);
-        if (nextEdge) console.log(`Branch no handle (fallback) matched, Edge: ${nextEdge.id}`);
-    }
-
-    // 5. 그 외 모든 노드 타입에서 핸들 ID 없는 엣지 찾기 (기본 경로)
-    if (!nextEdge && !sourceHandleId && sourceNode.type !== 'branch') { // branch 아닌 경우만
+    // 3. sourceHandleId 없고 핸들 없는 엣지 찾기 (branch fallback / 기본 경로 통합)
+    if (!nextEdge && !sourceHandleId) {
         nextEdge = scenario.edges.find(edge => edge.source === currentNodeId && !edge.sourceHandle);
         if (nextEdge) console.log(`Default edge (no handle) matched for node type ${sourceNode.type}, Edge: ${nextEdge.id}`);
     }

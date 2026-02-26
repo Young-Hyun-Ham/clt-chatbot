@@ -1,71 +1,52 @@
 // app/store/slices/conversationSlice.js
-import {
-  collection,
-  addDoc,
-  query,
-  orderBy,
-  onSnapshot,
-  getDocs,
-  serverTimestamp,
-  deleteDoc,
-  doc,
-  updateDoc,
-  limit, // loadConversation에서 사용될 수 있으므로 유지
-  startAfter, // loadConversation에서 사용될 수 있으므로 유지
-  writeBatch,
-} from "firebase/firestore";
 import { locales } from "../../lib/locales";
 import { getErrorKey } from "../../lib/errorHandler";
-
-const MESSAGE_LIMIT = 15; // 메시지 로드 제한 (chatSlice와 일치)
+import { FASTAPI_BASE_URL } from "../../lib/constants";
+import {
+  fetchAllConversationsForUser,
+  fetchScenarioSessionsForConversation,
+  deleteScenarioSession,
+  deleteConversationFull
+} from "../../lib/api";
 
 export const createConversationSlice = (set, get) => ({
   // State
-  conversations: [], // 전체 대화 목록
-  currentConversationId: null, // 현재 활성화된 대화 ID
-  unsubscribeConversations: null, // 대화 목록 리스너 해제 함수
-  scenariosForConversation: {}, // 각 대화별 시나리오 세션 목록 (확장 시 로드)
-  expandedConversationId: null, // 히스토리 패널에서 확장된 대화 ID
+  conversations: [],
+  currentConversationId: null,
+  unsubscribeConversations: null,
+  scenariosForConversation: {},
+  expandedConversationId: null,
 
   // Actions
-  loadConversations: (userId) => {
-    if (get().unsubscribeConversations) {
-      console.log("Conversations listener already active.");
-      return;
+  loadConversations: async (userId) => {
+    get().unsubscribeConversations?.(); // 기존 리스너 해제
+    set({ unsubscribeConversations: null });
+
+    try {
+      const params = new URLSearchParams({
+        usr_id: userId,
+        ten_id: "1000",
+        stg_id: "DEV",
+        sec_ofc_id: "000025"
+      });
+      const response = await fetch(`${FASTAPI_BASE_URL}/conversations?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch conversations");
+      const conversations = await response.json();
+      set({ conversations });
+    } catch (error) {
+      console.error("FastAPI loadConversations error:", error);
+      const { language, showEphemeralToast } = get();
+      const errorKey = getErrorKey(error);
+      const message =
+        locales[language]?.[errorKey] ||
+        locales["en"]?.errorUnexpected ||
+        "Failed to load conversations.";
+      showEphemeralToast(message, "error");
     }
-
-    const q = query(
-      collection(get().db, "chats", userId, "conversations"),
-      orderBy("pinned", "desc"),
-      orderBy("updatedAt", "desc")
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const conversations = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        set({ conversations });
-      },
-      (error) => {
-        console.error("Error listening to conversations changes:", error);
-        const { language, showEphemeralToast } = get();
-        const errorKey = getErrorKey(error);
-        const message =
-          locales[language]?.[errorKey] ||
-          locales["en"]?.errorUnexpected ||
-          "Failed to load conversations.";
-        showEphemeralToast(message, "error");
-      }
-    );
-
-    set({ unsubscribeConversations: unsubscribe });
   },
 
   loadConversation: async (conversationId) => {
-    const user = get().user;
+    const { user, language, showEphemeralToast } = get();
     if (
       !user ||
       get().currentConversationId === conversationId ||
@@ -80,9 +61,7 @@ export const createConversationSlice = (set, get) => ({
       return;
     }
 
-    const { language, showEphemeralToast } = get();
-
-    set(state => {
+    set((state) => {
         if (state.completedResponses.has(conversationId)) {
             const newCompletedSet = new Set(state.completedResponses);
             newCompletedSet.delete(conversationId);
@@ -91,33 +70,17 @@ export const createConversationSlice = (set, get) => ({
         return {};
     });
 
-    get().unsubscribeAllMessagesAndScenarios?.();
-    get().resetMessages?.(language);
-
     set({
       currentConversationId: conversationId,
       expandedConversationId: null,
     });
+
+    get().unsubscribeAllMessagesAndScenarios?.(); 
+    get().resetMessages?.(language); // 메시지 초기화
     get().setIsLoading?.(true);
-
+    
     try {
-      await get().loadInitialMessages?.(conversationId);
-
-      const scenariosRef = collection(
-        get().db,
-        "chats",
-        user.uid,
-        "conversations",
-        conversationId,
-        "scenario_sessions"
-      );
-      const scenariosQuery = query(scenariosRef);
-      const scenariosSnapshot = await getDocs(scenariosQuery);
-
-      scenariosSnapshot.forEach((doc) => {
-        get().subscribeToScenarioSession?.(doc.id);
-      });
-
+      await get().loadInitialMessages(conversationId);
     } catch (error) {
       console.error(`Error loading conversation ${conversationId}:`, error);
       const errorKey = getErrorKey(error);
@@ -136,60 +99,46 @@ export const createConversationSlice = (set, get) => ({
   },
 
   createNewConversation: async (returnId = false) => {
+    // 현재 대화가 없고 returnId가 false이면 중단 (불필요한 생성 방지)
     if (get().currentConversationId === null && !returnId) return null;
 
     get().unsubscribeAllMessagesAndScenarios?.();
     get().resetMessages?.(get().language);
+    get().setIsLoading?.(true);
 
     const { language, user, showEphemeralToast } = get();
+    const title = locales[language]?.["newChat"] || "New Chat";
 
-    if (user) {
-      try {
-        const conversationRef = await addDoc(
-          collection(get().db, "chats", user.uid, "conversations"),
-          {
-            title: locales[language]?.["newChat"] || "New Conversation",
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            pinned: false,
-          }
-        );
-        const newConversationId = conversationRef.id;
-
-        await get().loadConversation(newConversationId);
-
-        if (get().currentConversationId !== newConversationId) {
-          await new Promise((res) => setTimeout(res, 200));
-          if (get().currentConversationId !== newConversationId) {
-            console.error(
-              "State update race condition: currentConversationId not set after loadConversation."
-            );
-            throw new Error(
-              "Failed to properly load the new conversation after creation."
-            );
-          }
-        }
-        console.log(
-          `New conversation ${newConversationId} created and loaded.`
-        );
-
-        return returnId ? newConversationId : null;
-      } catch (error) {
-        console.error("Error creating new conversation:", error);
-        const errorKey = getErrorKey(error);
-        const message =
-          locales[language]?.[errorKey] ||
-          locales["en"]?.errorUnexpected ||
-          "Failed to create new conversation.";
-        showEphemeralToast(message, "error");
-        set({ currentConversationId: null, expandedConversationId: null });
-        get().resetMessages?.(language);
-        get().setIsLoading?.(false);
-        return null;
+    try {
+      const response = await fetch(`${FASTAPI_BASE_URL}/conversations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          usr_id: user.uid,
+          title,
+          ten_id: "1000",
+          stg_id: "DEV",
+          sec_ofc_id: "000025"
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to create conversation");
+      
+      const newConvo = await response.json();
+      const newConvoId = newConvo.id || newConvo.conversation_id;
+      
+      if (!newConvoId) {
+        throw new Error("No conversation ID in response");
       }
-    } else {
+      
+      await get().loadConversations(user.uid); // 목록 갱신
+      await get().loadConversation(newConvoId); 
+      
+      console.log(`New conversation (FastAPI) ${newConvoId} created and loaded.`);
+      return returnId ? newConvoId : null;
+    } catch (error) {
+      console.error("FastAPI createNewConversation error:", error);
+      showEphemeralToast("Failed to create conversation (API).", "error");
       set({ currentConversationId: null, expandedConversationId: null });
-      get().resetMessages?.(language);
       get().setIsLoading?.(false);
       return null;
     }
@@ -203,43 +152,31 @@ export const createConversationSlice = (set, get) => ({
       return;
     }
 
-    const conversationRef = doc(
-      get().db,
-      "chats",
-      user.uid,
-      "conversations",
-      conversationId
-    );
-    const batch = writeBatch(get().db);
-
     try {
-      const scenariosRef = collection(conversationRef, "scenario_sessions");
-      const scenariosSnapshot = await getDocs(scenariosRef);
-      scenariosSnapshot.forEach((doc) => {
-        batch.delete(doc.ref);
+      const params = new URLSearchParams({
+        usr_id: user.uid,
+        ten_id: "1000",
+        stg_id: "DEV",
+        sec_ofc_id: "000025"
       });
-
-      const messagesRef = collection(conversationRef, "messages");
-      const messagesSnapshot = await getDocs(messagesRef);
-      messagesSnapshot.forEach((doc) => {
-        batch.delete(doc.ref);
+      const response = await fetch(`${FASTAPI_BASE_URL}/conversations/${conversationId}?${params}`, {
+        method: "DELETE",
       });
+      if (!response.ok) throw new Error("Failed to delete conversation");
 
-      batch.delete(conversationRef);
-      await batch.commit();
-
-      console.log(`Conversation ${conversationId} deleted successfully.`);
-
+      await get().loadConversations(user.uid); // 목록 갱신
+      
       if (get().currentConversationId === conversationId) {
-        get().unsubscribeAllMessagesAndScenarios?.();
-        get().resetMessages?.(get().language);
-        set({ 
-          currentConversationId: null, 
-          expandedConversationId: null 
-        });
+         get().unsubscribeAllMessagesAndScenarios?.();
+         get().resetMessages?.(get().language);
+         set({ 
+           currentConversationId: null, 
+           expandedConversationId: null 
+         });
       }
+      showEphemeralToast("Conversation deleted.", "success");
     } catch (error) {
-      console.error(`Error deleting conversation ${conversationId}:`, error);
+      console.error("deleteConversation error:", error);
       const errorKey = getErrorKey(error);
       const message =
         locales[language]?.[errorKey] ||
@@ -263,26 +200,23 @@ export const createConversationSlice = (set, get) => ({
       return;
     }
     const trimmedTitle = newTitle.trim().substring(0, 100);
+
     try {
-      const conversationRef = doc(
-        get().db,
-        "chats",
-        user.uid,
-        "conversations",
-        conversationId
-      );
-      await updateDoc(conversationRef, { title: trimmedTitle });
+      await fetch(`${FASTAPI_BASE_URL}/conversations/${conversationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          usr_id: user.uid,
+          title: trimmedTitle,
+          ten_id: "1000",
+          stg_id: "DEV",
+          sec_ofc_id: "000025"
+        }),
+      });
+      await get().loadConversations(user.uid);
     } catch (error) {
-      console.error(
-        `Error updating title for conversation ${conversationId}:`,
-        error
-      );
-      const errorKey = getErrorKey(error);
-      const message =
-        locales[language]?.[errorKey] ||
-        locales["en"]?.errorUnexpected ||
-        "Failed to update conversation title.";
-      showEphemeralToast(message, "error");
+      console.error("updateConversationTitle error:", error);
+      showEphemeralToast("Failed to update title.", "error");
     }
   },
 
@@ -295,98 +229,35 @@ export const createConversationSlice = (set, get) => ({
       typeof pinned !== "boolean"
     )
       return;
+
     try {
-      const conversationRef = doc(
-        get().db,
-        "chats",
-        user.uid,
-        "conversations",
-        conversationId
-      );
-      await updateDoc(conversationRef, { pinned });
+      await fetch(`${FASTAPI_BASE_URL}/conversations/${conversationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          usr_id: user.uid,
+          is_pinned: pinned,
+          ten_id: "1000",
+          stg_id: "DEV",
+          sec_ofc_id: "000025"
+        }),
+      });
+      await get().loadConversations(user.uid);
     } catch (error) {
-      console.error(
-        `Error updating pin status for conversation ${conversationId}:`,
-        error
-      );
-      const errorKey = getErrorKey(error);
-      const message =
-        locales[language]?.[errorKey] ||
-        locales["en"]?.errorUnexpected ||
-        "Failed to update pin status.";
-      showEphemeralToast(message, "error");
+      console.error("pinConversation error:", error);
+      showEphemeralToast("Failed to update pin status.", "error");
     }
   },
 
   toggleConversationExpansion: (conversationId) => {
-    const {
-      expandedConversationId,
-      user,
-      language,
-      showEphemeralToast,
-    } = get();
-    const currentUnsubscribeMap = get().unsubscribeScenariosMap || {};
+    const { expandedConversationId } = get();
 
     if (expandedConversationId === conversationId) {
-      get().unsubscribeFromScenarioSession?.(conversationId);
       set({ expandedConversationId: null });
       return;
     }
 
-    if (expandedConversationId) {
-      get().unsubscribeFromScenarioSession?.(expandedConversationId);
-    }
-
     set({ expandedConversationId: conversationId });
-    if (!user) return;
-
-    const scenariosRef = collection(
-      get().db,
-      "chats",
-      user.uid,
-      "conversations",
-      conversationId,
-      "scenario_sessions"
-    );
-    const q = query(scenariosRef, orderBy("createdAt", "desc"));
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const scenarios = snapshot.docs.map((doc) => ({
-          sessionId: doc.id,
-          ...doc.data(),
-        }));
-        set((state) => ({
-          scenariosForConversation: {
-            ...state.scenariosForConversation,
-            [conversationId]: scenarios,
-          },
-        }));
-      },
-      (error) => {
-        console.error(
-          `Error listening to scenarios for conversation ${conversationId}:`,
-          error
-        );
-        const errorKey = getErrorKey(error);
-        const message =
-          locales[language]?.[errorKey] ||
-          locales["en"]?.errorUnexpected ||
-          "Failed to load scenario list.";
-        showEphemeralToast(message, "error");
-        unsubscribe();
-        set((state) => ({
-          ...(state.expandedConversationId === conversationId
-            ? { expandedConversationId: null }
-            : {}),
-          scenariosForConversation: {
-            ...state.scenariosForConversation,
-            [conversationId]: [],
-          },
-        }));
-      }
-    );
   },
 
   deleteAllConversations: async () => {
@@ -403,61 +274,39 @@ export const createConversationSlice = (set, get) => ({
             conversations: [], // Optimistic UI update
         });
 
-        // 2. 모든 대화 ID 가져오기
-        const conversationsRef = collection(get().db, "chats", user.uid, "conversations");
-        const allConversationsSnapshot = await getDocs(conversationsRef);
-        const conversationIds = allConversationsSnapshot.docs.map(doc => doc.id);
+        // 2. FastAPI를 통해 모든 대화 삭제
+        // 2-1. 사용자의 모든 conversations 조회
+        const allConversations = await fetchAllConversationsForUser(user.uid);
+        console.log(`[deleteAllConversations] Found ${allConversations.length} conversations for user ${user.uid}`);
 
-        if (conversationIds.length === 0) {
-            showEphemeralToast(locales[language]?.deleteAllConvosSuccess || "All conversation history successfully deleted.", "success");
-            return;
+        // 2-2. 각 conversation에 대해 scenario-sessions 삭제 후 conversation 삭제
+        for (const conversation of allConversations) {
+          const conversationId = conversation.id || conversation.conversation_id;
+          console.log(`[deleteAllConversations] Processing conversation: ${conversationId}`);
+
+          // 2-2-1. 해당 conversation의 모든 scenario-sessions 조회
+          const scenarioSessions = await fetchScenarioSessionsForConversation(conversationId, user.uid);
+          console.log(`[deleteAllConversations] Found ${scenarioSessions.length} scenario sessions in conversation ${conversationId}`);
+
+          // 2-2-2. 각 scenario-session 삭제
+          for (const session of scenarioSessions) {
+            const sessionId = session.id || session.session_id;
+            console.log(`[deleteAllConversations] Deleting scenario session: ${sessionId}`);
+            const deleteResult = await deleteScenarioSession(conversationId, sessionId, user.uid);
+            console.log(`[deleteAllConversations] Scenario session deletion result: ${deleteResult}`);
+          }
+
+          // 2-2-3. conversation 삭제
+          console.log(`[deleteAllConversations] Deleting conversation: ${conversationId}`);
+          const convDeleteResult = await deleteConversationFull(conversationId, user.uid);
+          console.log(`[deleteAllConversations] Conversation deletion result: ${convDeleteResult}`);
         }
 
-        let batch = writeBatch(get().db);
-        let batchCount = 0;
-
-        for (const convoId of conversationIds) {
-            const conversationRef = doc(get().db, "chats", user.uid, "conversations", convoId);
-
-            // 3. 메시지 서브컬렉션 삭제
-            const messagesRef = collection(conversationRef, "messages");
-            const messagesSnapshot = await getDocs(messagesRef);
-            messagesSnapshot.forEach((doc) => {
-                batch.delete(doc.ref);
-                batchCount++;
-            });
-
-            // 4. 시나리오 세션 서브컬렉션 삭제
-            const scenariosRef = collection(conversationRef, "scenario_sessions");
-            const scenariosSnapshot = await getDocs(scenariosRef);
-            scenariosSnapshot.forEach((doc) => {
-                batch.delete(doc.ref);
-                batchCount++;
-            });
-
-            // 5. 대화 문서 삭제
-            batch.delete(conversationRef);
-            batchCount++;
-
-            // Firestore는 한 배치에 최대 500개의 작업만 허용합니다.
-            // 안전을 위해 490개마다 커밋하고 새 배치를 시작합니다.
-            if (batchCount >= 490) {
-                await batch.commit();
-                batch = writeBatch(get().db);
-                batchCount = 0;
-            }
-        }
-
-        // 6. 남은 작업 커밋
-        if (batchCount > 0) {
-            await batch.commit();
-        }
-
-        console.log(`All ${conversationIds.length} conversations and their subcollections deleted successfully.`);
+        console.log("[deleteAllConversations] All conversations and scenario sessions deleted successfully via FastAPI.");
         showEphemeralToast(locales[language]?.deleteAllConvosSuccess || "All conversation history successfully deleted.", "success");
 
     } catch (error) {
-        console.error("Error deleting all conversations:", error);
+        console.error("[deleteAllConversations] Error deleting all conversations:", error);
         const errorKey = getErrorKey(error);
         const message =
           locales[language]?.[errorKey] ||
@@ -467,7 +316,6 @@ export const createConversationSlice = (set, get) => ({
     }
 },
 
-  // --- 👇 [추가] index.js에서 이동된 복합 액션 ---
   handleScenarioItemClick: (conversationId, scenario) => {
     if (get().currentConversationId !== conversationId) {
       get().loadConversation(conversationId);
@@ -487,5 +335,4 @@ export const createConversationSlice = (set, get) => ({
       get().subscribeToScenarioSession?.(scenario.sessionId);
     }
   },
-  // --- 👆 [추가] ---
 });

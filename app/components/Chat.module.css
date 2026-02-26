@@ -440,10 +440,7 @@ input:checked + .slider:before {
   --option-button-min-width: 160px;
   margin-top: 10px;
   display: grid;
-  grid-template-columns: repeat(
-    auto-fill,
-    minmax(var(--option-button-min-width, 160px), 1fr)
-  );
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
@@ -987,3 +984,39 @@ body.dark .formGridTable tbody tr:hover {
 }
 
 /* --- 👆 [추가] --- */
+
+/* Link Node Button Style */
+.linkButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #667eea;
+  background: transparent;
+  border: 1.5px solid #667eea;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.linkButton:hover {
+  transform: translateY(-2px);
+  background-color: rgba(102, 126, 234, 0.08);
+  border-color: #764ba2;
+  color: #764ba2;
+}
+
+.linkButton:active {
+  transform: translateY(0);
+  background-color: rgba(102, 126, 234, 0.12);
+}
+
+.linkButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+

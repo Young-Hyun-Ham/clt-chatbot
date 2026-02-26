@@ -27,123 +27,10 @@ export default function ApiDocsPage() {
       <header className={styles.header}>
         <h1>CLT Chatbot API Documentation</h1>
         <p>
-          이 문서는 FastAPI 백엔드 서버를 기반으로 한 챗봇 API를 설명합니다. Base URL: <code>/api/v1</code>
+          이 문서는 <strong>FastAPI</strong>로 마이그레이션된 백엔드 서버 API를 설명합니다.<br/>
+          <strong>Note:</strong> 현재 개발 버전은 <u>인증(Authentication)이 비활성화</u>되어 있어 토큰 없이 호출 가능합니다.
         </p>
       </header>
-
-      {/* --- Authentication --- */}
-      <section className={styles.endpoint}>
-        <div className={styles.endpointHeader}>
-          <span className={`${styles.method} ${styles.post}`}>POST</span>
-          <span className={styles.path}>/auth/login</span>
-        </div>
-        <div className={styles.endpointBody}>
-          <h2>Google 계정 로그인</h2>
-          <p>Google OAuth ID 토큰을 사용하여 사용자를 인증하고, 서버 접근을 위한 JWT를 발급합니다.</p>
-          <dl>
-            <dt>요청 본문:</dt>
-            <dd><pre>{`{
-  "idToken": "string (Google ID Token)"
-}`}</pre></dd>
-            <dt>응답 (200 OK):</dt>
-            <dd><pre>{`{
-  "accessToken": "string (JWT)",
-  "user": {
-    "uid": "string",
-    "displayName": "string",
-    "email": "string",
-    "photoURL": "string"
-  }
-}`}</pre></dd>
-          </dl>
-          
-          <CollapsibleSection title="구현 가이드: 안전한 토큰 교환 방식">
-              <h4>인증 흐름</h4>
-              <ol className={styles.guideList}>
-                  <li><strong>클라이언트: Google 로그인</strong><br/>
-                      사용자가 프론트엔드에서 Google 로그인을 완료하면 Firebase Auth SDK로부터 <code>ID 토큰</code>을 받습니다.
-                  </li>
-                  <li><strong>클라이언트 → 서버: ID 토큰 전송</strong><br/>
-                      클라이언트는 이 <code>ID 토큰</code>을 본문(body)에 담아 FastAPI의 <code>/auth/login</code> 엔드포인트로 POST 요청을 보냅니다.
-                  </li>
-                  <li><strong>서버: Google ID 토큰 검증</strong><br/>
-                      FastAPI 서버는 수신한 <code>ID 토큰</code>이 유효한지 Google에 직접 확인합니다. (예: <code>google-auth</code> 라이브러리 사용)
-                  </li>
-                  <li><strong>서버: 사용자 조회 및 생성</strong><br/>
-                      토큰 검증 후 얻은 사용자 정보(이메일, 이름 등)를 사용하여 데이터베이스에서 사용자를 조회하거나, 없는 경우 새로 생성합니다.
-                  </li>
-                  <li><strong>서버 → 클라이언트: 자체 Access Token 발급</strong><br/>
-                      서버는 해당 사용자를 식별하는 내용(예: user_id)을 담아, 자체 비밀 키로 서명한 <strong>새로운 Access Token(JWT)</strong>을 생성하여 클라이언트에 반환합니다.
-                  </li>
-                   <li><strong>클라이언트: Access Token 저장</strong><br/>
-                      클라이언트는 서버로부터 받은 이 Access Token을 로컬 스토리지나 쿠키와 같은 안전한 공간에 저장합니다.
-                  </li>
-                  <li><strong>이후 모든 요청: Access Token 사용</strong><br/>
-                      클라이언트는 이후 모든 API 요청 시 HTTP 헤더에 <code>Authorization: Bearer YOUR_FASTAPI_TOKEN</code> 형식으로 Access Token을 담아 보냅니다. FastAPI 서버는 이 토큰의 유효성만 검증하여 사용자를 인증합니다.
-                  </li>
-              </ol>
-
-              <h4>FastAPI 구현 예시 (Python)</h4>
-              <pre>{`
-# main.py
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
-from pydantic import BaseModel
-
-# --- 설정 (실제로는 .env 파일에서 로드) ---
-SECRET_KEY = "YOUR_SECRET_KEY" # FastAPI 서버만 아는 비밀 키
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-app = FastAPI()
-
-class TokenData(BaseModel):
-    user_id: str | None = None
-
-# Google ID 토큰 검증 및 자체 토큰 발급 로직 (login)
-@app.post("/auth/login")
-async def login_for_access_token(google_token: dict):
-    # 1. google-auth 라이브러리로 google_token['idToken'] 검증
-    # 2. 검증 성공 시 DB에서 사용자 조회/생성
-    # 3. FastAPI 자체 Access Token 생성
-    user_id = "some_user_id_from_db" # 예시
-    access_token = create_access_token(
-        data={"sub": user_id}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    return {"accessToken": access_token, "user": ...}
-
-# 요청 시마다 토큰을 검증하여 현재 사용자를 가져오는 함수
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise credentials_exception
-        token_data = TokenData(user_id=user_id)
-    except JWTError:
-        raise credentials_exception
-    # DB에서 user_id로 사용자 정보 조회
-    # user = get_user_from_db(user_id=token_data.user_id)
-    # if user is None:
-    #     raise credentials_exception
-    return user # 현재 사용자 객체 반환
-
-# 보호된 엔드포인트 예시
-@app.get("/users/me")
-async def read_users_me(current_user: dict = Depends(get_current_user)):
-    return current_user
-              `}</pre>
-          </CollapsibleSection>
-        </div>
-      </section>
 
       {/* --- Chat --- */}
       <section className={styles.endpoint}>
@@ -152,28 +39,40 @@ async def read_users_me(current_user: dict = Depends(get_current_user)):
           <span className={styles.path}>/chat</span>
         </div>
         <div className={styles.endpointBody}>
-          <h2>챗 응답 생성</h2>
-          <p>사용자 메시지를 받아 LLM 또는 시나리오 엔진을 통해 응답을 생성합니다. LLM 응답 시 스트리밍을 지원합니다.</p>
+          <h2>메시지 전송 및 응답 생성</h2>
+          <p>
+            사용자의 메시지를 처리하고 AI 응답을 생성합니다.<br/>
+            LLM 응답의 경우 <strong>Streaming Response</strong>가 반환될 수 있습니다.
+          </p>
           <dl>
-            <dt>헤더:</dt>
-            <dd><code>Authorization: Bearer YOUR_ACCESS_TOKEN</code></dd>
-            <dt>요청 본문:</dt>
+            <dt>Content-Type:</dt>
+            <dd><code>application/json</code></dd>
+            <dt>요청 본문 (Request Body):</dt>
             <dd><pre>{`{
-  "conversationId": "string | null",
-  "message": {
-    "text": "string"
-  },
-  "language": "string ('ko' or 'en')"
+  "conversation_id": "string (Optional)", // 기존 대화에 이어서 말할 경우
+  "content": "string",                    // 사용자 입력 메시지
+  "language": "ko" | "en",                // (Optional) 기본값 'ko'
+  "slots": {                              // (Optional) 현재 시나리오 슬롯 상태
+    "key": "value"
+  }
 }`}</pre></dd>
-            <dt>응답 (200 OK):</dt>
+            <dt>응답 (Response):</dt>
             <dd>
-              <p>LLM 응답의 경우 <strong>Streaming Text</strong>, 시나리오 응답의 경우 <strong>JSON 객체</strong>가 반환됩니다.</p>
+                <p><strong>Case 1: 일반/시나리오 응답 (JSON)</strong></p>
+                <pre>{`{
+  "type": "text" | "scenario",
+  "message": "string",
+  "slots": { ... },
+  "next_node": { ... } // 시나리오 진행 시
+}`}</pre>
+                <p><strong>Case 2: LLM 스트리밍 (Server-Sent Events)</strong></p>
+                <pre>{`data: {"type": "token", "content": "안녕"}\n\n...`}</pre>
             </dd>
           </dl>
         </div>
       </section>
 
-      {/* --- Conversations List --- */}
+      {/* --- Conversations --- */}
       <section className={styles.endpoint}>
         <div className={styles.endpointHeader}>
           <span className={`${styles.method} ${styles.get}`}>GET</span>
@@ -181,16 +80,16 @@ async def read_users_me(current_user: dict = Depends(get_current_user)):
         </div>
         <div className={styles.endpointBody}>
           <h2>대화 목록 조회</h2>
-          <p>사용자의 모든 대화 목록을 최신순으로 가져옵니다.</p>
+          <p>저장된 모든 대화방 목록을 최신순으로 반환합니다.</p>
           <dl>
-            <dt>헤더:</dt>
-            <dd><code>Authorization: Bearer YOUR_ACCESS_TOKEN</code></dd>
             <dt>응답 (200 OK):</dt>
             <dd><pre>{`[
   {
-    "id": "string",
+    "id": "uuid-string",
     "title": "string",
-    "updated_at": "datetime"
+    "is_pinned": boolean,
+    "created_at": "2024-05-20T10:00:00Z",
+    "updated_at": "2024-05-20T10:30:00Z"
   },
   ...
 ]`}</pre></dd>
@@ -198,287 +97,737 @@ async def read_users_me(current_user: dict = Depends(get_current_user)):
         </div>
       </section>
 
-      {/* --- Conversation Detail --- */}
-      <section className={styles.endpoint}>
-        <div className={styles.endpointHeader}>
-          <span className={`${styles.method} ${styles.get}`}>GET</span>
-          <span className={styles.path}>/conversations/{'{conversation_id}'}</span>
-        </div>
-        <div className={styles.endpointBody}>
-          <h2>특정 대화 상세 조회</h2>
-          <p>특정 대화의 메시지 기록을 페이지네이션으로 가져옵니다.</p>
-          <dl>
-            <dt>헤더:</dt>
-            <dd><code>Authorization: Bearer YOUR_ACCESS_TOKEN</code></dd>
-            <dt>경로 파라미터:</dt>
-            <dd><code>conversation_id (string, required)</code></dd>
-            <dt>쿼리 파라미터:</dt>
-            <dd><code>limit (number, optional, default: 15)</code><br/><code>cursor (string, optional)</code></dd>
-            <dt>응답 (200 OK):</dt>
-            <dd><pre>{`{
-  "messages": [
-    {
-      "id": "string",
-      "sender": "user" | "bot",
-      "text": "string",
-      "created_at": "datetime"
-    },
-    ...
-  ],
-  "next_cursor": "string | null"
-}`}</pre></dd>
-          </dl>
-        </div>
-      </section>
-      
-      {/* --- Save Message --- */}
       <section className={styles.endpoint}>
         <div className={styles.endpointHeader}>
           <span className={`${styles.method} ${styles.post}`}>POST</span>
-          <span className={styles.path}>/conversations/messages</span>
+          <span className={styles.path}>/conversations</span>
         </div>
         <div className={styles.endpointBody}>
-          <h2>메시지 저장</h2>
-          <p>
-            메시지를 대화에 저장합니다. <code>conversationId</code>가 <code>null</code>이거나 제공되지 않은 경우, 새 대화를 생성하고 해당 대화에 메시지를 저장합니다.
-          </p>
+          <h2>새 대화방 생성</h2>
+          <p>새로운 대화 세션을 생성합니다.</p>
           <dl>
-            <dt>헤더:</dt>
-            <dd><code>Authorization: Bearer YOUR_ACCESS_TOKEN</code></dd>
             <dt>요청 본문:</dt>
             <dd><pre>{`{
-  "conversationId": "string | null",
-  "message": {
-    "sender": "user" | "bot",
-    "text": "string",
-    "type": "string (optional)",
-    "node": "object (optional)",
-    "scenarios": "Array<string> (optional)"
-  }
+  "title": "string (Optional)" // 생략 시 'New Chat' 등 기본값 적용
 }`}</pre></dd>
             <dt>응답 (201 Created):</dt>
-            <dd>
-              <p>성공적으로 저장(또는 생성)된 후의 대화 ID와 메시지 정보를 반환합니다.</p>
-              <pre>{`{
-  "conversationId": "string (new or existing ID)",
-  "message": {
-    "id": "string",
-    "sender": "user" | "bot",
-    "text": "string",
-    "created_at": "datetime"
-    // ...
-  }
-}`}</pre>
-            </dd>
+            <dd><pre>{`{
+  "id": "new-uuid-string",
+  "title": "New Chat",
+  "created_at": "...",
+  "updated_at": "..."
+}`}</pre></dd>
           </dl>
         </div>
       </section>
 
-      {/* --- Conversation Update --- */}
-       <section className={styles.endpoint}>
+      <section className={styles.endpoint}>
+        <div className={styles.endpointHeader}>
+          <span className={`${styles.method} ${styles.get}`}>GET</span>
+          <span className={styles.path}>/conversations/{'{conversation_id}'}</span>
+        </div>
+        <div className={styles.endpointBody}>
+          <h2>대화 상세 조회</h2>
+          <p>특정 대화방의 메시지 기록을 조회합니다.</p>
+          <dl>
+            <dt>Path Parameter:</dt>
+            <dd><code>conversation_id</code>: 조회할 대화방 ID</dd>
+            <dt>Query Parameters:</dt>
+            <dd>
+                <code>limit</code>: 조회할 메시지 개수 (Default: 50)<br/>
+                <code>offset</code>: 페이징 처리를 위한 오프셋
+            </dd>
+            <dt>응답 (200 OK):</dt>
+            <dd><pre>{`{
+  "id": "uuid-string",
+  "messages": [
+    {
+      "id": "msg-uuid",
+      "role": "user" | "assistant",
+      "content": "string",
+      "created_at": "..."
+    },
+    ...
+  ]
+}`}</pre></dd>
+          </dl>
+        </div>
+      </section>
+
+      <section className={styles.endpoint}>
         <div className={styles.endpointHeader}>
           <span className={`${styles.method} ${styles.patch}`}>PATCH</span>
           <span className={styles.path}>/conversations/{'{conversation_id}'}</span>
         </div>
         <div className={styles.endpointBody}>
-          <h2>대화 제목 수정</h2>
-          <p>특정 대화의 제목을 수정합니다.</p>
+          <h2>대화 정보 수정</h2>
+          <p>대화방의 제목을 변경하거나 고정(Pin) 상태를 변경합니다.</p>
           <dl>
-            <dt>헤더:</dt>
-            <dd><code>Authorization: Bearer YOUR_ACCESS_TOKEN</code></dd>
-            <dt>경로 파라미터:</dt>
-            <dd><code>conversation_id (string, required)</code></dd>
             <dt>요청 본문:</dt>
             <dd><pre>{`{
-  "title": "string (New Title)"
+  "title": "변경된 제목",    // (Optional)
+  "is_pinned": true       // (Optional)
 }`}</pre></dd>
             <dt>응답 (200 OK):</dt>
-            <dd><pre>{`{
-  "id": "string",
-  "title": "string",
-  "updated_at": "datetime"
-}`}</pre></dd>
+            <dd>수정된 대화방 객체 반환</dd>
           </dl>
         </div>
       </section>
 
-      {/* --- Conversation Delete --- */}
       <section className={styles.endpoint}>
         <div className={styles.endpointHeader}>
           <span className={`${styles.method} ${styles.delete}`}>DELETE</span>
           <span className={styles.path}>/conversations/{'{conversation_id}'}</span>
         </div>
         <div className={styles.endpointBody}>
-          <h2>대화 삭제</h2>
-          <p>특정 대화를 영구적으로 삭제합니다.</p>
+          <h2>대화방 삭제</h2>
+          <p>특정 대화방과 관련된 모든 메시지 및 시나리오 기록을 영구 삭제합니다.</p>
           <dl>
-             <dt>헤더:</dt>
-            <dd><code>Authorization: Bearer YOUR_ACCESS_TOKEN</code></dd>
-            <dt>경로 파라미터:</dt>
-            <dd><code>conversation_id (string, required)</code></dd>
             <dt>응답 (204 No Content):</dt>
-            <dd>성공 시 본문 없음</dd>
+            <dd>본문 없음</dd>
           </dl>
         </div>
       </section>
 
-      {/* --- User Personal Settings --- */}
-       <section className={styles.endpoint}>
-        <div className={styles.endpointHeader}>
-          <span className={`${styles.method} ${styles.get}`}>GET</span>
-          <span className={styles.path}>/settings</span>
-        </div>
-        <div className={styles.endpointBody}>
-          <h2>사용자 개인 설정 조회</h2>
-          <p>현재 사용자의 개인 맞춤형 설정을 조회합니다. (Firestore: <code>settings/{'{uid}'}</code>)</p>
-          <dl>
-            <dt>헤더:</dt>
-            <dd><code>Authorization: Bearer YOUR_ACCESS_TOKEN</code></dd>
-            <dt>응답 (200 OK):</dt>
-            <dd><pre>{`{
-  "language": "ko" | "en",
-  "fontSize": "default" | "small",
-  "isDevMode": "boolean",
-  "contentTruncateLimit": "number",
-  "hideCompletedScenarios": "boolean",
-  "hideDelayInHours": "number",
-  "fontSizeDefault": "string (e.g., '16px')"
-}`}</pre></dd>
-          </dl>
-        </div>
-      </section>
+      {/* --- Scenarios --- */}
       <section className={styles.endpoint}>
         <div className={styles.endpointHeader}>
-          <span className={`${styles.method} ${styles.patch}`}>PATCH</span>
-          <span className={styles.path}>/settings</span>
+          <span className={`${styles.method} ${styles.get}`}>GET</span>
+          <span className={styles.path}>/scenarios</span>
         </div>
         <div className={styles.endpointBody}>
-          <h2>사용자 개인 설정 수정</h2>
-          <p>현재 사용자의 개인 설정을 부분적으로 수정합니다. (Firestore: <code>settings/{'{uid}'}</code>)</p>
+          <h2>시나리오 목록 조회</h2>
+          <p>사용 가능한 시나리오 목록 및 카테고리 정보를 반환합니다.</p>
           <dl>
-            <dt>헤더:</dt>
-            <dd><code>Authorization: Bearer YOUR_ACCESS_TOKEN</code></dd>
-             <dt>요청 본문 (수정할 필드만 포함):</dt>
-            <dd><pre>{`{
-  "language": "en",
-  "isDevMode": true,
-  "contentTruncateLimit": 20
-}`}</pre></dd>
             <dt>응답 (200 OK):</dt>
-            <dd>수정된 전체 설정 객체</dd>
+            <dd><pre>{`[
+  {
+    "category": "인사",
+    "items": [
+      { "id": "greeting", "title": "기본 인사", "description": "..." },
+      ...
+    ]
+  },
+  ...
+]`}</pre></dd>
           </dl>
         </div>
       </section>
 
-      {/* --- General Settings --- */}
-       <section className={styles.endpoint}>
-        <div className={styles.endpointHeader}>
-          <span className={`${styles.method} ${styles.get}`}>GET</span>
-          <span className={styles.path}>/settings/general</span>
-        </div>
-        <div className={styles.endpointBody}>
-          <h2>전역(일반) 설정 조회</h2>
-          <p>모든 사용자에게 공통으로 적용되는 전역 설정을 조회합니다. (Firestore: <code>config/general</code>)</p>
-          <dl>
-            <dt>헤더:</dt>
-            <dd><code>Authorization: Bearer YOUR_ACCESS_TOKEN</code> (관리자 권한 필요)</dd>
-            <dt>응답 (200 OK):</dt>
-            <dd><pre>{`{
-  "maxFavorites": "number",
-  "llmProvider": "gemini" | "flowise",
-  "flowiseApiUrl": "string"
-}`}</pre></dd>
-          </dl>
-        </div>
-      </section>
-      <section className={styles.endpoint}>
-        <div className={styles.endpointHeader}>
-          <span className={`${styles.method} ${styles.patch}`}>PATCH</span>
-          <span className={styles.path}>/settings/general</span>
-        </div>
-        <div className={styles.endpointBody}>
-          <h2>전역(일반) 설정 수정</h2>
-          <p>전역 설정을 부분적으로 수정합니다. (Firestore: <code>config/general</code>)</p>
-          <dl>
-            <dt>헤더:</dt>
-            <dd><code>Authorization: Bearer YOUR_ACCESS_TOKEN</code> (관리자 권한 필요)</dd>
-             <dt>요청 본문 (수정할 필드만 포함):</dt>
-            <dd><pre>{`{
-  "maxFavorites": 15,
-  "llmProvider": "flowise"
-}`}</pre></dd>
-            <dt>응답 (200 OK):</dt>
-            <dd>수정된 전체 설정 객체</dd>
-          </dl>
-        </div>
-      </section>
-      
-      {/* --- Notifications --- */}
-      <section className={styles.endpoint}>
-        <div className={styles.endpointHeader}>
-          <span className={`${styles.method} ${styles.get}`}>GET</span>
-          <span className={styles.path}>/notifications</span>
-        </div>
-        <div className={styles.endpointBody}>
-          <h2>알림 목록 조회</h2>
-          <p>사용자의 모든 알림을 최신순으로 가져옵니다.</p>
-          <dl>
-            <dt>헤더:</dt>
-            <dd><code>Authorization: Bearer YOUR_ACCESS_TOKEN</code></dd>
-            <dt>응답 (200 OK):</dt>
-            <dd><pre>{`{
-  "notifications": [
+      {/* --- 추가 요청: Scenario Sessions --- */}
+      <section style={{ marginTop: '40px', paddingTop: '20px', borderTop: '2px solid #ddd' }}>
+        <h1 style={{ fontSize: '1.8em', marginBottom: '20px' }}>
+          📋 추가 요청: Scenario Sessions 관리 API
+        </h1>
+        <p style={{ fontSize: '1.1em', color: '#555', marginBottom: '30px' }}>
+          다음은 <strong>Firebase에서 FastAPI로의 마이그레이션</strong>을 완료하기 위해 
+          백엔드에서 구현이 필요한 시나리오 세션 관리 엔드포인트입니다.
+        </p>
+
+        {/* GET /scenarios/categories */}
+        <section className={styles.endpoint}>
+          <div className={styles.endpointHeader}>
+            <span className={`${styles.method} ${styles.get}`}>GET</span>
+            <span className={styles.path}>/scenarios/categories</span>
+          </div>
+          <div className={styles.endpointBody}>
+            <h2>숏컷 카테고리 목록 조회</h2>
+            <p>
+              채팅 입력창 좌측에 표시되는 숏컷 카테고리 메뉴 구조를 조회합니다.<br/>
+              테넌트별, 스테이지별로 다른 메뉴 구조를 반환할 수 있습니다.
+            </p>
+            <dl>
+              <dt>Query Parameters:</dt>
+              <dd>
+                <code>ten_id</code> (string, optional): 테넌트 ID (기본값: "1000")<br/>
+                <code>stg_id</code> (string, optional): 스테이지 ID (기본값: "DEV")<br/>
+                <code>sec_ofc_id</code> (string, optional): 부서/오피스 ID (기본값: "000025")
+              </dd>
+              <dt>응답 (200 OK) - Dictionary&lt;string, Array of CategoryResponse&gt;:</dt>
+              <dd><pre>{`{
+  "key1": [
     {
-      "id": "string",
-      "message": "string",
-      "type": "info" | "error" | "success",
-      "read": "boolean",
-      "created_at": "datetime"
+      "id": "category-001",
+      "name": "자주 찾는 서비스",
+      "order": 1,
+      "subCategories": [
+        {
+          "title": "기본 문의",
+          "items": [
+            {
+              "title": "요금 조회",
+              "description": "현재 요금을 조회합니다",
+              "action": {
+                "type": "scenario",
+                "value": "charge_inquiry"
+              }
+            },
+            ...
+          ]
+        },
+        ...
+      ]
+    },
+    ...
+  ]
+}`}</pre></dd>
+              <dt>에러 응답 (422 Validation Error):</dt>
+              <dd><pre>{`{
+  "detail": [
+    {
+      "loc": ["query", "ten_id"],
+      "msg": "value is not a valid string",
+      "type": "type_error.string"
+    }
+  ]
+}`}</pre></dd>
+            </dl>
+          </div>
+        </section>
+
+        {/* PUT /scenarios/categories */}
+        <section className={styles.endpoint}>
+          <div className={styles.endpointHeader}>
+            <span className={`${styles.method} ${styles.put}`}>PUT</span>
+            <span className={styles.path}>/scenarios/categories</span>
+          </div>
+          <div className={styles.endpointBody}>
+            <h2>숏컷 카테고리 저장</h2>
+            <p>
+              채팅 입력창 좌측의 숏컷 카테고리 메뉴 구조를 업데이트합니다.<br/>
+              기존 데이터는 완전히 대체됩니다. (Upsert)
+            </p>
+            <dl>
+              <dt>Content-Type:</dt>
+              <dd><code>application/json</code></dd>
+              <dt>요청 본문 (Request Body) - ShortCutInsertRequest:</dt>
+              <dd><pre>{`{
+  "categories": [
+    {
+      "id": "category-001",
+      "name": "자주 찾는 서비스",
+      "order": 1,
+      "subCategories": [
+        {
+          "title": "기본 문의",
+          "items": [
+            {
+              "title": "요금 조회",
+              "description": "현재 요금을 조회합니다",
+              "action": {
+                "type": "scenario",
+                "value": "charge_inquiry"
+              }
+            },
+            ...
+          ]
+        },
+        ...
+      ]
+    },
+    ...
+  ]
+}`}</pre></dd>
+              <dt>응답 (200 OK):</dt>
+              <dd><pre>{`{
+  "success": true,
+  "message": "숏컷 카테고리가 저장되었습니다",
+  "saved_at": "2024-05-20T10:30:00Z"
+}`}</pre></dd>
+              <dt>에러 응답 (422 Validation Error):</dt>
+              <dd><pre>{`{
+  "detail": [
+    {
+      "loc": ["body", "categories"],
+      "msg": "field required",
+      "type": "value_error.missing"
+    }
+  ]
+}`}</pre></dd>
+            </dl>
+          </div>
+        </section>
+
+        {/* GET /scenarios/categories */}
+        <section className={styles.endpoint}>
+          <div className={styles.endpointHeader}>
+            <span className={`${styles.method} ${styles.get}`}>GET</span>
+            <span className={styles.path}>/scenarios/categories</span>
+          </div>
+          <div className={styles.endpointBody}>
+            <h2>숏컷 카테고리 목록 조회</h2>
+            <p>
+              채팅 입력창 좌측에 표시되는 숏컷 카테고리 메뉴 구조를 조회합니다.<br/>
+              테넌트별, 스테이지별로 다른 메뉴 구조를 반환할 수 있습니다.
+            </p>
+            <dl>
+              <dt>Query Parameters:</dt>
+              <dd>
+                <code>ten_id</code> (string, optional): 테넌트 ID (기본값: "1000")<br/>
+                <code>stg_id</code> (string, optional): 스테이지 ID (기본값: "DEV")<br/>
+                <code>sec_ofc_id</code> (string, optional): 부서/오피스 ID (기본값: "000025")
+              </dd>
+              <dt>응답 (200 OK) - Dictionary&lt;string, Array of CategoryResponse&gt;:</dt>
+              <dd><pre>{`{
+  "key1": [
+    {
+      "id": "category-001",
+      "name": "자주 찾는 서비스",
+      "order": 1,
+      "subCategories": [
+        {
+          "title": "기본 문의",
+          "items": [
+            {
+              "title": "요금 조회",
+              "description": "현재 요금을 조회합니다",
+              "action": {
+                "type": "scenario",
+                "value": "charge_inquiry"
+              }
+            },
+            ...
+          ]
+        },
+        ...
+      ]
+    },
+    ...
+  ]
+}`}</pre></dd>
+              <dt>에러 응답 (422 Validation Error):</dt>
+              <dd><pre>{`{
+  "detail": [
+    {
+      "loc": ["query", "ten_id"],
+      "msg": "value is not a valid string",
+      "type": "type_error.string"
+    }
+  ]
+}`}</pre></dd>
+            </dl>
+          </div>
+        </section>
+
+        {/* PUT /scenarios/categories */}
+        <section className={styles.endpoint}>
+          <div className={styles.endpointHeader}>
+            <span className={`${styles.method} ${styles.put}`}>PUT</span>
+            <span className={styles.path}>/scenarios/categories</span>
+          </div>
+          <div className={styles.endpointBody}>
+            <h2>숏컷 카테고리 저장</h2>
+            <p>
+              채팅 입력창 좌측의 숏컷 카테고리 메뉴 구조를 업데이트합니다.<br/>
+              기존 데이터는 완전히 대체됩니다. (Upsert)
+            </p>
+            <dl>
+              <dt>Content-Type:</dt>
+              <dd><code>application/json</code></dd>
+              <dt>요청 본문 (Request Body) - ShortCutInsertRequest:</dt>
+              <dd><pre>{`{
+  "categories": [
+    {
+      "id": "category-001",
+      "name": "자주 찾는 서비스",
+      "order": 1,
+      "subCategories": [
+        {
+          "title": "기본 문의",
+          "items": [
+            {
+              "title": "요금 조회",
+              "description": "현재 요금을 조회합니다",
+              "action": {
+                "type": "scenario",
+                "value": "charge_inquiry"
+              }
+            },
+            ...
+          ]
+        },
+        ...
+      ]
+    },
+    ...
+  ]
+}`}</pre></dd>
+              <dt>응답 (200 OK):</dt>
+              <dd><pre>{`{
+  "success": true,
+  "message": "숏컷 카테고리가 저장되었습니다",
+  "saved_at": "2024-05-20T10:30:00Z"
+}`}</pre></dd>
+              <dt>에러 응답 (422 Validation Error):</dt>
+              <dd><pre>{`{
+  "detail": [
+    {
+      "loc": ["body", "categories"],
+      "msg": "field required",
+      "type": "value_error.missing"
+    }
+  ]
+}`}</pre></dd>
+            </dl>
+          </div>
+        </section>
+
+        {/* GET /shortcut */}
+        <section className={styles.endpoint}>
+          <div className={styles.endpointHeader}>
+            <span className={`${styles.method} ${styles.get}`}>GET</span>
+            <span className={styles.path}>/shortcut</span>
+          </div>
+          <div className={styles.endpointBody}>
+            <h2>저장된 숏컷 목록 조회</h2>
+            <p>
+              숏컷(바로가기) 목록을 조회합니다.<br/>
+              테넌트별, 스테이지별로 다른 숏컷 목록을 반환할 수 있습니다.
+            </p>
+            <dl>
+              <dt>Query Parameters:</dt>
+              <dd>
+                <code>ten_id</code> (string, optional): 테넌트 ID (기본값: "1000")<br/>
+                <code>stg_id</code> (string, optional): 스테이지 ID (기본값: "DEV")<br/>
+                <code>sec_ofc_id</code> (string, optional): 부서/오피스 ID (기본값: "000025")
+              </dd>
+              <dt>응답 (200 OK) - Array of ShortcutResponse:</dt>
+              <dd><pre>{`[
+  {
+    "id": "shortcut-001",
+    "name": "자주 찾는 서비스",
+    "order": 1,
+    "subCategories": [
+      {
+        "title": "기본 문의",
+        "items": [
+          {
+            "title": "요금 조회",
+            "description": "현재 요금을 조회합니다",
+            "action": {
+              "type": "scenario",
+              "value": "charge_inquiry"
+            }
+          },
+          ...
+        ]
+      },
+      ...
+    ]
+  },
+  ...
+]`}</pre></dd>
+              <dt>에러 응답 (422 Validation Error):</dt>
+              <dd><pre>{`{
+  "detail": [
+    {
+      "loc": ["query", "ten_id"],
+      "msg": "value is not a valid string",
+      "type": "type_error.string"
+    }
+  ]
+}`}</pre></dd>
+            </dl>
+          </div>
+        </section>
+
+        {/* PUT /shortcut */}
+        <section className={styles.endpoint}>
+          <div className={styles.endpointHeader}>
+            <span className={`${styles.method} {{styles.put}}`}>PUT</span>
+            <span className={styles.path}>/shortcut</span>
+          </div>
+          <div className={styles.endpointBody}>
+            <h2>저장된 숏컷 목록 저장</h2>
+            <p>
+              숏컷(바로가기) 목록을 업데이트합니다.<br/>
+              기존 데이터는 완전히 대체됩니다. (Upsert)
+            </p>
+            <dl>
+              <dt>Content-Type:</dt>
+              <dd><code>application/json</code></dd>
+              <dt>요청 본문 (Request Body) - ShortcutPutRequest:</dt>
+              <dd><pre>{`{
+  "ten_id": "1000",
+  "stg_id": "DEV",
+  "sec_ofc_id": "000025",
+  "categories": [
+    {
+      "name": "자주 찾는 서비스",
+      "subCategories": [
+        {
+          "title": "기본 문의",
+          "items": [
+            {
+              "title": "요금 조회",
+              "description": "현재 요금을 조회합니다",
+              "action": {
+                "type": "scenario",
+                "value": "charge_inquiry"
+              }
+            },
+            ...
+          ]
+        },
+        ...
+      ]
+    },
+    ...
+  ]
+}`}</pre></dd>
+              <dt>응답 (200 OK):</dt>
+              <dd><pre>{`{
+  "success": true,
+  "message": "숏컷이 저장되었습니다",
+  "saved_at": "2024-05-20T10:30:00Z"
+}`}</pre></dd>
+              <dt>에러 응답 (422 Validation Error):</dt>
+              <dd><pre>{`{
+  "detail": [
+    {
+      "loc": ["body", "categories"],
+      "msg": "field required",
+      "type": "value_error.missing"
+    }
+  ]
+}`}</pre></dd>
+            </dl>
+          </div>
+        </section>
+
+        {/* PATCH /scenarios/{scenario_id}/last-used */}
+        <section className={styles.endpoint}>
+          <div className={styles.endpointHeader}>
+            <span className={`${styles.method} ${styles.patch}`}>PATCH</span>
+            <span className={styles.path}>/scenarios/{'{scenario_id}'}/last-used</span>
+          </div>
+          <div className={styles.endpointBody}>
+            <h2>시나리오 마지막 사용 시간 업데이트</h2>
+            <p>특정 시나리오의 마지막 사용 시간을 업데이트합니다. (분석/통계용)</p>
+            <dl>
+              <dt>Path Parameter:</dt>
+              <dd><code>scenario_id</code>: 업데이트할 시나리오 ID</dd>
+              <dt>응답 (200 OK):</dt>
+              <dd><pre>{`{
+  "id": "scenario_id",
+  "last_used_at": "2024-05-20T10:30:00Z"
+}`}</pre></dd>
+            </dl>
+          </div>
+        </section>
+
+        {/* POST /conversations/{conversation_id}/scenario-sessions */}
+        <section className={styles.endpoint}>
+          <div className={styles.endpointHeader}>
+            <span className={`${styles.method} ${styles.post}`}>POST</span>
+            <span className={styles.path}>/conversations/{'{conversation_id}'}/scenario-sessions</span>
+          </div>
+          <div className={styles.endpointBody}>
+            <h2>시나리오 세션 생성</h2>
+            <p>
+              새로운 시나리오 세션을 생성합니다. 
+              (Firestore <code>addDoc(scenarioSessions)</code> 대체)
+            </p>
+            <dl>
+              <dt>Path Parameter:</dt>
+              <dd><code>conversation_id</code>: 대화방 ID</dd>
+              <dt>요청 본문:</dt>
+              <dd><pre>{`{
+  "scenario_id": "string",           // 실행할 시나리오 ID
+  "slots": {                         // (Optional) 초기 슬롯 데이터
+    "key": "value",
+    "user_name": "홍길동"
+  },
+  "initial_context": {}              // (Optional) 추가 컨텍스트
+}`}</pre></dd>
+              <dt>응답 (201 Created):</dt>
+              <dd><pre>{`{
+  "id": "session-uuid",
+  "conversation_id": "conv-uuid",
+  "scenario_id": "greeting",
+  "status": "starting",
+  "slots": { "user_name": "홍길동" },
+  "messages": [],
+  "state": null,
+  "created_at": "2024-05-20T10:00:00Z",
+  "updated_at": "2024-05-20T10:00:00Z"
+}`}</pre></dd>
+            </dl>
+          </div>
+        </section>
+
+        {/* GET /conversations/{conversation_id}/scenario-sessions/{session_id} */}
+        <section className={styles.endpoint}>
+          <div className={styles.endpointHeader}>
+            <span className={`${styles.method} ${styles.get}`}>GET</span>
+            <span className={styles.path}>/conversations/{'{conversation_id}'}/scenario-sessions/{'{session_id}'}</span>
+          </div>
+          <div className={styles.endpointBody}>
+            <h2>시나리오 세션 조회</h2>
+            <p>특정 시나리오 세션의 현재 상태를 조회합니다. (폴링/실시간 동기화용)</p>
+            <dl>
+              <dt>Path Parameters:</dt>
+              <dd>
+                <code>conversation_id</code>: 대화방 ID<br/>
+                <code>session_id</code>: 시나리오 세션 ID
+              </dd>
+              <dt>응답 (200 OK):</dt>
+              <dd><pre>{`{
+  "id": "session-uuid",
+  "conversation_id": "conv-uuid",
+  "scenario_id": "greeting",
+  "status": "active" | "completed" | "failed" | "cancelled",
+  "slots": { "user_name": "홍길동", "email": "..." },
+  "messages": [
+    {
+      "id": "msg-uuid",
+      "sender": "bot" | "user",
+      "node": { ... },
+      "text": "string (Optional)",
+      "selected_option": "string (Optional)"
     },
     ...
   ],
-  "hasUnread": "boolean"
+  "state": {
+    "scenario_id": "greeting",
+    "current_node_id": "node-123",
+    "awaiting_input": true
+  },
+  "created_at": "2024-05-20T10:00:00Z",
+  "updated_at": "2024-05-20T10:30:00Z"
 }`}</pre></dd>
-          </dl>
-        </div>
+            </dl>
+          </div>
+        </section>
+
+        {/* PATCH /conversations/{conversation_id}/scenario-sessions/{session_id} */}
+        <section className={styles.endpoint}>
+          <div className={styles.endpointHeader}>
+            <span className={`${styles.method} ${styles.patch}`}>PATCH</span>
+            <span className={styles.path}>/conversations/{'{conversation_id}'}/scenario-sessions/{'{session_id}'}</span>
+          </div>
+          <div className={styles.endpointBody}>
+            <h2>시나리오 세션 업데이트</h2>
+            <p>
+              시나리오 세션의 상태, 슬롯, 메시지, 상태를 업데이트합니다. 
+              (Firestore <code>updateDoc(sessionRef)</code> 대체)
+            </p>
+            <dl>
+              <dt>Path Parameters:</dt>
+              <dd>
+                <code>conversation_id</code>: 대화방 ID<br/>
+                <code>session_id</code>: 시나리오 세션 ID
+              </dd>
+              <dt>요청 본문 (모두 Optional):</dt>
+              <dd><pre>{`{
+  "status": "active" | "completed" | "failed",
+  "slots": {                         // 슬롯 업데이트 (병합)
+    "user_name": "김철수"
+  },
+  "messages": [                      // 메시지 배열 (전체 교체)
+    {
+      "id": "msg-uuid",
+      "sender": "bot" | "user",
+      "node": { ... },
+      "text": "string (Optional)",
+      "selected_option": "string (Optional)"
+    },
+    ...
+  ],
+  "state": {                         // 상태 정보 업데이트
+    "scenario_id": "greeting",
+    "current_node_id": "node-456",
+    "awaiting_input": false
+  }
+}`}</pre></dd>
+              <dt>응답 (200 OK):</dt>
+              <dd>업데이트된 시나리오 세션 객체 전체 반환 (GET 응답과 동일)</dd>
+            </dl>
+          </div>
+        </section>
+
+        {/* DELETE /conversations/{conversation_id}/scenario-sessions/{session_id} */}
+        <section className={styles.endpoint}>
+          <div className={styles.endpointHeader}>
+            <span className={`${styles.method} ${styles.delete}`}>DELETE</span>
+            <span className={styles.path}>/conversations/{'{conversation_id}'}/scenario-sessions/{'{session_id}'}</span>
+          </div>
+          <div className={styles.endpointBody}>
+            <h2>시나리오 세션 삭제</h2>
+            <p>
+              특정 시나리오 세션을 삭제합니다. 
+              실패한 세션 정리나 사용자 취소 시 사용. 
+              (Firestore <code>deleteDoc(sessionRef)</code> 대체)
+            </p>
+            <dl>
+              <dt>Path Parameters:</dt>
+              <dd>
+                <code>conversation_id</code>: 대화방 ID<br/>
+                <code>session_id</code>: 시나리오 세션 ID
+              </dd>
+              <dt>응답 (204 No Content):</dt>
+              <dd>본문 없음</dd>
+              <dt>대체 응답 (200 OK):</dt>
+              <dd><pre>{`{
+  "success": true,
+  "message": "Scenario session deleted successfully",
+  "deleted_session_id": "session-uuid"
+}`}</pre></dd>
+            </dl>
+          </div>
+        </section>
+
+        {/* 추가 정보 */}
+        <section style={{ marginTop: '40px', padding: '20px', backgroundColor: '#f0f4f8', borderLeft: '4px solid #0066cc' }}>
+          <h3>📌 구현 시 고려사항</h3>
+          <ul>
+            <li>
+              <strong>실시간 동기화:</strong> 
+              현재 코드에서 Firebase의 <code>onSnapshot</code>을 사용 중입니다. 
+              마이그레이션 전략:
+              <ul>
+                <li><strong>폴링 방식:</strong> GET 엔드포인트를 1-2초 간격으로 호출 (간단함, 부하 증가)</li>
+                <li><strong>WebSocket:</strong> 실시간 양방향 통신 (복잡함, 최적화)</li>
+                <li><strong>Server-Sent Events (SSE):</strong> 단방향 스트리밍 (중간 수준)</li>
+              </ul>
+            </li>
+            <li>
+              <strong>Timestamp 처리:</strong> 
+              모든 응답의 <code>created_at</code>, <code>updated_at</code>은 서버 시간 사용 (UTC ISO 8601 형식)
+            </li>
+            <li>
+              <strong>에러 응답:</strong> 
+              일관된 에러 형식 필요:
+              <pre>{`{
+  "error": "error_code",
+  "message": "사용자 친화적 메시지",
+  "details": {}
+}`}</pre>
+            </li>
+            <li>
+              <strong>권한 검증:</strong> 
+              현재 인증 비활성화 상태이지만, 향후 각 엔드포인트에서 
+              사용자가 해당 리소스에 접근 권한이 있는지 검증 필요
+            </li>
+            <li>
+              <strong>데이터 베이스 스키마:</strong>
+              <code>scenario_sessions</code> 테이블 구조:
+              <pre>{`CREATE TABLE scenario_sessions (
+  id UUID PRIMARY KEY,
+  conversation_id UUID FOREIGN KEY,
+  scenario_id VARCHAR,
+  status VARCHAR,
+  slots JSONB,
+  messages JSONB,
+  state JSONB,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+);`}</pre>
+            </li>
+          </ul>
+        </section>
       </section>
-      <section className={styles.endpoint}>
-        <div className
-={styles.endpointHeader}>
-          <span className={`${styles.method} ${styles.patch}`}>PATCH</span>
-          <span className={styles.path}>/notifications/{'{notification_id}'}/read</span>
-        </div>
-        <div className={styles.endpointBody}>
-          <h2>알림 읽음 처리</h2>
-          <p>특정 알림을 읽음 상태로 변경합니다.</p>
-          <dl>
-            <dt>헤더:</dt>
-            <dd><code>Authorization: Bearer YOUR_ACCESS_TOKEN</code></dd>
-             <dt>경로 파라미터:</dt>
-            <dd><code>notification_id (string, required)</code></dd>
-            <dt>응답 (204 No Content):</dt>
-            <dd>성공 시 본문 없음</dd>
-          </dl>
-        </div>
-      </section>
-      <section className={styles.endpoint}>
-        <div className={styles.endpointHeader}>
-          <span className={`${styles.method} ${styles.delete}`}>DELETE</span>
-          <span className={styles.path}>/notifications/{'{notification_id}'}</span>
-        </div>
-        <div className={styles.endpointBody}>
-          <h2>알림 삭제</h2>
-          <p>특정 알림을 삭제합니다.</p>
-          <dl>
-            <dt>헤더:</dt>
-            <dd><code>Authorization: Bearer YOUR_ACCESS_TOKEN</code></dd>
-             <dt>경로 파라미터:</dt>
-            <dd><code>notification_id (string, required)</code></dd>
-            <dt>응답 (204 No Content):</dt>
-            <dd>성공 시 본문 없음</dd>
-          </dl>
-        </div>
-      </section>
+
     </div>
   );
 }

@@ -30,7 +30,7 @@ JSON
 
 {
   "id": "string",         // Unique node ID
-  "type": "string",       // Node type (e.g., "message", "form", "api", "llm", "delay")
+  "type": "string",       // Node type (e.g., "message", "form", "api", "delay")
   "position": {           // Position on the canvas
     "x": "number",
     "y": "number"

@@ -5,31 +5,18 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import dynamic from "next/dynamic";
 import { useChatStore } from "../store";
 import { useTranslations } from "../hooks/useTranslations";
-import { useAutoScroll } from "../hooks/useAutoScroll"; // [추가] 훅 임포트
+import { useAutoScroll } from "../hooks/useAutoScroll";
+import { TARGET_AUTO_OPEN_URL, AUTO_OPEN_COMPLETE_MESSAGE, escapeRegExp } from "../lib/constants";
 import styles from "./Chat.module.css";
-import FavoritePanel from "./FavoritePanel";
 import ScenarioBubble from "./ScenarioBubble";
 import CheckCircle from "./icons/CheckCircle";
 import MoonIcon from "./icons/MoonIcon";
 import LogoIcon from "./icons/LogoIcon";
 import CopyIcon from "./icons/CopyIcon";
 import MarkdownRenderer from "./MarkdownRenderer";
-import LikeIcon from "./icons/LikeIcon";
-import DislikeIcon from "./icons/DislikeIcon";
-import UploadIcon from "./icons/UploadIcon";
-import TransferIcon from "./icons/TransferIcon";
+// import LikeIcon from "./icons/LikeIcon";
+// import DislikeIcon from "./icons/DislikeIcon";
 import mainMarkdownStyles from "./MainChatMarkdown.module.css";
-
-// --- 👇 [유지] 대체할 URL과 문구 정의 ---
-const TARGET_AUTO_OPEN_URL = "http://172.20.130.91:9110/oceans/BPM_P1002.do?tenId=2000&stgId=TST&pgmNr=BKD_M3201";
-const REPLACEMENT_TEXT = "e-SOP 링크 호출 완료했습니다.";
-// --- 👆 [유지] ---
-
-// --- 👇 [추가] 정규식 특수문자 이스케이프 함수 ---
-const escapeRegExp = (string) => {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
-};
-// --- 👆 [추가] ---
 
 const ChartRenderer = dynamic(() => import("./ChartRenderer"), {
   loading: () => <p>Loading chart...</p>,
@@ -127,7 +114,7 @@ const MessageWithButtons = ({ msg }) => {
   if (sender === 'bot' && typeof processedText === "string" && 
      (processedText.includes('172.20.130.91') || processedText.includes('BPM_P1002'))) {
     
-    const replacement = REPLACEMENT_TEXT;
+    const replacement = AUTO_OPEN_COMPLETE_MESSAGE;
 
     // 1. URL 자체를 문구로 치환 (HTML 엔티티 &amp; 대응)
     const escapedUrl = escapeRegExp(TARGET_AUTO_OPEN_URL);
@@ -235,35 +222,32 @@ const MessageWithButtons = ({ msg }) => {
 };
 
 export default function Chat() {
-  const {
-    messages,
-    isLoading,
-    openScenarioPanel,
-    loadMoreMessages,
-    hasMoreMessages,
-    theme,
-    setTheme,
-    fontSize,
-    setFontSize,
-    scrollToMessageId,
-    setScrollToMessageId,
-    activePanel,
-    focusChatInput,
-    forceScrollToBottom,
-    setForceScrollToBottom,
-    scrollAmount,
-    resetScroll,
-    selectedOptions,
-    setSelectedOption,
-    dimUnfocusedPanels,
-    setMessageFeedback,
-    enableFavorites,
-    showScenarioBubbles,
-  } = useChatStore();
+  const messages = useChatStore((state) => state.messages);
+  const isLoading = useChatStore((state) => state.isLoading);
+  const openScenarioPanel = useChatStore((state) => state.openScenarioPanel);
+  const loadMoreMessages = useChatStore((state) => state.loadMoreMessages);
+  const hasMoreMessages = useChatStore((state) => state.hasMoreMessages);
+  const theme = useChatStore((state) => state.theme);
+  const setTheme = useChatStore((state) => state.setTheme);
+  const fontSize = useChatStore((state) => state.fontSize);
+  const setFontSize = useChatStore((state) => state.setFontSize);
+  const scrollToMessageId = useChatStore((state) => state.scrollToMessageId);
+  const setScrollToMessageId = useChatStore((state) => state.setScrollToMessageId);
+  const activePanel = useChatStore((state) => state.activePanel);
+  const focusChatInput = useChatStore((state) => state.focusChatInput);
+  const forceScrollToBottom = useChatStore((state) => state.forceScrollToBottom);
+  const setForceScrollToBottom = useChatStore((state) => state.setForceScrollToBottom);
+  const scrollAmount = useChatStore((state) => state.scrollAmount);
+  const resetScroll = useChatStore((state) => state.resetScroll);
+  const selectedOptions = useChatStore((state) => state.selectedOptions);
+  const setSelectedOption = useChatStore((state) => state.setSelectedOption);
+  const dimUnfocusedPanels = useChatStore((state) => state.dimUnfocusedPanels);
+  // const setMessageFeedback = useChatStore((state) => state.setMessageFeedback);
+  const showScenarioBubbles = useChatStore((state) => state.showScenarioBubbles);
   
   const [copiedMessageId, setCopiedMessageId] = useState(null);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
-  const [animatedButton, setAnimatedButton] = useState(null);
+  // const [animatedButton, setAnimatedButton] = useState(null);
   const containerRef = useRef(null);
   const { t } = useTranslations();
 
@@ -397,13 +381,13 @@ export default function Chat() {
     });
   };
 
-  const handleFeedbackClick = (messageId, type) => {
-    setAnimatedButton({ messageId, type });
-    setMessageFeedback(messageId, type);
-    setTimeout(() => {
-      setAnimatedButton(null);
-    }, 300);
-  };
+  // const handleFeedbackClick = (messageId, type) => {
+  //   setAnimatedButton({ messageId, type });
+  //   setMessageFeedback(messageId, type);
+  //   setTimeout(() => {
+  //     setAnimatedButton(null);
+  //   }, 300);
+  // };
 
   const hasMessages = messages.some((m) => m.id !== "initial");
 
@@ -445,11 +429,7 @@ export default function Chat() {
         ref={scrollRef} // [리팩토링] 훅에서 반환된 ref 연결
         onClick={handleHistoryClick}
       >
-        {!hasMessages ? (
-          enableFavorites ? (
-            <FavoritePanel />
-          ) : null
-        ) : (
+        {!hasMessages ? null : (
           <>
             {isFetchingMore && (
               <div className={styles.messageRow}>
@@ -470,7 +450,7 @@ export default function Chat() {
             {messages.map((msg, index) => {
               if (msg.id === "initial") return null;
 
-              if (msg.type === "scenario_bubble") {
+              if (msg.type === "scenario_bubble" || msg.type === "scenario_message") {
                 if (!showScenarioBubbles) {
                   return null;
                 }
@@ -478,11 +458,12 @@ export default function Chat() {
                   <ScenarioBubble
                     key={msg.id || msg.scenarioSessionId}
                     scenarioSessionId={msg.scenarioSessionId}
+                    messageData={msg}  // ✅ 메시지 전체 데이터 전달
                   />
                 );
               } else {
                 const selectedOption = selectedOptions[msg.id];
-                const currentFeedback = msg.feedback || null;
+                // const currentFeedback = msg.feedback || null;
                 const isStreaming =
                   index === messages.length - 1 &&
                   msg.sender === "bot" &&
@@ -553,24 +534,27 @@ export default function Chat() {
                           />
                           {msg.sender === "bot" && msg.scenarios && (
                             <div className={styles.scenarioList}>
-                              {msg.scenarios.map((name) => {
-                                const isSelected = selectedOption === name;
+                              {msg.scenarios.map((scenario) => {
+                                // 시나리오가 객체인 경우 (ID 포함) 또는 문자열인 경우 모두 처리
+                                const scenarioId = typeof scenario === 'object' ? scenario.id : scenario;
+                                const scenarioName = typeof scenario === 'object' ? scenario.name : scenario;
+                                const isSelected = selectedOption === scenarioName;
                                 const isDimmed = selectedOption && !isSelected;
                                 return (
                                   <button
-                                    key={name}
+                                    key={scenarioId}
                                     className={`${styles.optionButton} ${
                                       isSelected ? styles.selected : ""
                                     } ${isDimmed ? styles.dimmed : ""}`}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setSelectedOption(msg.id, name);
-                                      openScenarioPanel(name);
+                                      setSelectedOption(msg.id, scenarioName);
+                                      openScenarioPanel(scenarioId); // ID 사용
                                     }}
                                     disabled={!!selectedOption}
                                   >
                                     <span className={styles.optionButtonText}>
-                                      {name}
+                                      {scenarioName}
                                     </span>
                                     <CheckCircle />
                                   </button>
@@ -588,6 +572,9 @@ export default function Chat() {
                           >
                             <CopyIcon />
                           </button>
+                          {/* Feedback buttons disabled */}
+                          {false && (
+                          <>
                           <button
                             className={`${styles.actionButton} ${
                               currentFeedback === "like"
@@ -620,18 +607,8 @@ export default function Chat() {
                           >
                             <DislikeIcon />
                           </button>
-                          <button
-                            className={styles.actionButton}
-                            onClick={() => handleUpload(msg.id)}
-                          >
-                            <UploadIcon />
-                          </button>
-                          <button
-                            className={styles.actionButton}
-                            onClick={() => handleTransfer(msg.id)}
-                          >
-                            <TransferIcon />
-                          </button>
+                          </>
+                          )}
                         </div>
                       )}
                     </div>

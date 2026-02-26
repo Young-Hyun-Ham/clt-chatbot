@@ -25,30 +25,46 @@ import {
 } from "../lib/parentMessaging";
 
 export default function ScenarioChat() {
-  const {
-    activeScenarioSessionId,
-    scenarioStates,
-    handleScenarioResponse,
-    endScenario,
-    setActivePanel,
-    setScenarioSelectedOption,
-    isScenarioPanelExpanded,
-    toggleScenarioPanelExpanded,
-    setScenarioSlots,
-  } = useChatStore();
+  const activeScenarioSessionId = useChatStore((state) => state.activeScenarioSessionId);
+  
+  // ✅ [최적화] selector를 사용하여 특정 시나리오 상태만 구독
+  // 다른 시나리오의 상태 변경 시 이 컴포넌트는 리렌더링되지 않음
+  const activeScenario = useChatStore(
+    (state) => activeScenarioSessionId ? state.scenarioStates[activeScenarioSessionId] : null,
+    (prev, next) => {
+      // 깊은 비교를 통해 불필요한 리렌더링 방지
+      if (prev === next) return true;
+      if (!prev || !next) return prev === next;
+      // 실제로 변경된 데이터만 비교
+      return (
+        prev.messages?.length === next.messages?.length &&
+        prev.status === next.status &&
+        prev.isLoading === next.isLoading &&
+        prev.state?.current_node_id === next.state?.current_node_id &&
+        JSON.stringify(prev.slots) === JSON.stringify(next.slots) &&
+        prev.title === next.title
+      );
+    }
+  );
+  
+  const handleScenarioResponse = useChatStore((state) => state.handleScenarioResponse);
+  const endScenario = useChatStore((state) => state.endScenario);
+  const setActivePanel = useChatStore((state) => state.setActivePanel);
+  const setScenarioSelectedOption = useChatStore((state) => state.setScenarioSelectedOption);
+  const isScenarioPanelExpanded = useChatStore((state) => state.isScenarioPanelExpanded);
+  const toggleScenarioPanelExpanded = useChatStore((state) => state.toggleScenarioPanelExpanded);
+  const setScenarioSlots = useChatStore((state) => state.setScenarioSlots);
+  const isDelayLoading = useChatStore((state) => state.isDelayLoading);
   const { t, language } = useTranslations();
 
-  const activeScenario = activeScenarioSessionId
-    ? scenarioStates[activeScenarioSessionId]
-    : null;
   const isCompleted =
     activeScenario?.status === "completed" ||
     activeScenario?.status === "failed" ||
     activeScenario?.status === "canceled";
   const scenarioMessages = activeScenario?.messages || [];
   const isScenarioLoading = activeScenario?.isLoading || false;
-  const currentScenarioNodeId = activeScenario?.state?.currentNodeId;
-  const scenarioId = activeScenario?.scenarioId;
+  const currentScenarioNodeId = activeScenario?.state?.current_node_id;
+  const scenarioId = activeScenario?.scenario_id;
   const currentSlots = activeScenario?.slots || {};
 
   // [리팩토링] 커스텀 스크롤 훅 사용 (ref 및 effect 로직 대체)
@@ -224,7 +240,7 @@ export default function ScenarioChat() {
           />
           <span className={styles.headerTitle}>
             {t("scenarioTitle")(
-              interpolateMessage(scenarioId || "Scenario", activeScenario.slots)
+              interpolateMessage(activeScenario?.title || "Scenario", activeScenario.slots)
             )}
           </span>
         </div>
@@ -279,31 +295,43 @@ export default function ScenarioChat() {
       </div>
 
       <div className={styles.history} ref={scrollRef}>
-        {groupedMessages.map((group, index) => {
-          if (!Array.isArray(group)) {
-            const msg = group;
-            return (
-              <div
-                key={msg.id || `${activeScenarioSessionId}-msg-${index}`}
-                className={`${styles.messageRow} ${styles.userRow}`}
-              >
-                <div
-                  className={`GlassEffect ${styles.message} ${styles.userMessage}`}
-                >
-                  <div className={styles.messageContent}>
-                    <MarkdownRenderer
-                      content={interpolateMessage(
-                        msg.text,
-                        activeScenario.slots
-                      )}
-                    />
-                  </div>
+        {scenarioMessages.length === 0 ? (
+          <div className={styles.messageRow}>
+            <div className={`${styles.message} ${styles.botMessage}`}>
+              <div className={styles.scenarioMessageContentWrapper}>
+                <LogoIcon className={styles.avatar} />
+                <div className={styles.messageContent}>
+                  <p>{t("loading")}</p>
                 </div>
               </div>
-            );
-          }
+            </div>
+          </div>
+        ) : (
+          groupedMessages.map((group, index) => {
+            if (!Array.isArray(group)) {
+              const msg = group;
+              return (
+                <div
+                  key={msg.id || `${activeScenarioSessionId}-msg-${index}`}
+                  className={`${styles.messageRow} ${styles.userRow}`}
+                >
+                  <div
+                    className={`GlassEffect ${styles.message} ${styles.userMessage}`}
+                  >
+                    <div className={styles.messageContent}>
+                      <MarkdownRenderer
+                        content={interpolateMessage(
+                          msg.text,
+                          activeScenario.slots
+                        )}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            }
 
-          const chain = group;
+            const chain = group;
           const isRichContent = chain.some(
             (msg) =>
               msg.node?.type === "form" ||
@@ -367,10 +395,7 @@ export default function ScenarioChat() {
                           <FormRenderer
                             node={msg.node}
                             onFormSubmit={handleFormSubmit}
-                            disabled={
-                              isCompleted ||
-                              msg.node.id !== currentScenarioNodeId
-                            }
+                            disabled={isCompleted}
                             language={language}
                             slots={currentSlots}
                             setScenarioSlots={setScenarioSlots}
@@ -392,8 +417,7 @@ export default function ScenarioChat() {
                           </div>
                         ) : msg.node?.type === "link" ? (
                           <div>
-                            <a
-                              href="#"
+                            <button
                               onClick={(e) => {
                                 e.preventDefault();
                                 openLinkThroughParent(
@@ -403,14 +427,16 @@ export default function ScenarioChat() {
                                   )
                                 );
                               }}
-                              target="_self"
-                              rel="noopener noreferrer"
-                              className={styles.linkNode}
-                            >
-                              {interpolateMessage(
-                                msg.node.data.display || msg.node.data.content,
+                              className={styles.linkButton}
+                              title={interpolateMessage(
+                                msg.node.data.content,
                                 activeScenario.slots
                               )}
+                            >
+                              <span>{interpolateMessage(
+                                msg.node.data.display || msg.node.data.content,
+                                activeScenario.slots
+                              )}</span>
                               <OpenInNewIcon
                                 style={{
                                   marginLeft: "4px",
@@ -419,7 +445,7 @@ export default function ScenarioChat() {
                                   height: "16px",
                                 }}
                               />
-                            </a>
+                            </button>
                           </div>
                         ) : (
                           <MarkdownRenderer
@@ -430,7 +456,9 @@ export default function ScenarioChat() {
                           />
                         )}
                         {msg.node?.type === "branch" &&
-                          msg.node.data.replies && (
+                          msg.node.data.replies &&
+                          (msg.node.data.evaluationType === "BUTTON" || 
+                           msg.node.data.evaluationType === "BUTTON_CLICK") && (
                             <div className={styles.scenarioList}>
                               {msg.node.data.replies.map((reply) => {
                                 const selectedOption = msg.selectedOption;
@@ -451,6 +479,11 @@ export default function ScenarioChat() {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (selectedOption || isCompleted) return;
+                                      console.log(`[ScenarioChat] Reply clicked:`, {
+                                        nodeId: msg.node.id,
+                                        replyValue: reply.value,
+                                        displayText: interpolatedDisplayText,
+                                      });
                                       setScenarioSelectedOption(
                                         activeScenarioSessionId,
                                         msg.node.id,
@@ -490,9 +523,10 @@ export default function ScenarioChat() {
               </div>
             </div>
           );
-        })}
+        })
+        )}
 
-        {isScenarioLoading && (
+        {(isScenarioLoading || isDelayLoading) && (
           <div className={styles.messageRow}>
             <div
               className={`GlassEffect ${styles.message} ${styles.botMessage}`}

@@ -64,8 +64,6 @@ export default function ChatInput() {
   );
   const focusRequest = useChatStore((state) => state.focusRequest);
   const scenarioCategories = useChatStore((state) => state.scenarioCategories);
-  const favorites = useChatStore((state) => state.favorites);
-  const toggleFavorite = useChatStore((state) => state.toggleFavorite);
   const handleShortcutClick = useChatStore(
     (state) => state.handleShortcutClick
   );
@@ -80,7 +78,6 @@ export default function ChatInput() {
   const mainInputPlaceholder = useChatStore(
     (state) => state.mainInputPlaceholder
   );
-  const enableFavorites = useChatStore((state) => state.enableFavorites);
   const mainInputValue = useChatStore((state) => state.mainInputValue);
   const setMainInputValue = useChatStore((state) => state.setMainInputValue);
   
@@ -94,7 +91,7 @@ export default function ChatInput() {
     ? scenarioStates[activeScenarioSessionId]
     : null;
   const isInputDisabled = isLoading;
-  const currentScenarioNodeId = activeScenario?.state?.currentNodeId;
+  const currentScenarioNodeId = activeScenario?.state?.current_node_id;
 
   const activeCategoryData =
     shortcutMenuOpen &&
@@ -167,7 +164,7 @@ export default function ChatInput() {
       <div className={styles.quickActionsContainer} ref={menuRef}>
         {/* 1. 카테고리 버튼들 렌더링 */}
         {scenarioCategories.map((category) => (
-          <div key={category.name} className={styles.categoryWrapper}>
+          <div key={category.id || category.name} className={styles.categoryWrapper}>
             <button
               className={`GlassEffect ${styles.categoryButton} ${
                 shortcutMenuOpen === category.name ? styles.active : ""
@@ -203,11 +200,6 @@ export default function ChatInput() {
                   {subCategory.title}
                 </h4>
                 {subCategory.items.map((item) => {
-                  const isFavorited = favorites.some(
-                    (fav) =>
-                      fav.action.type === item.action.type &&
-                      fav.action.value === item.action.value
-                  );
                   return (
                     <div key={item.title} className={styles.dropdownItem}>
                       <div
@@ -220,19 +212,6 @@ export default function ChatInput() {
                           handleItemClick(item)
                         }
                       >
-                        {enableFavorites && (
-                          <button
-                            className={`${styles.favoriteButton} ${
-                              isFavorited ? styles.favorited : ""
-                            }`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleFavorite(item);
-                            }}
-                          >
-                            <StarIcon size={18} filled={isFavorited} />
-                          </button>
-                        )}
                         <div className={styles.itemContent}>
                           <span className={styles.itemTitle}>
                             {item.title}

@@ -4,11 +4,9 @@ import {
   processGeminiStream,
 } from "../../lib/streamProcessors";
 import { locales } from "../../lib/locales";
+import { FASTAPI_BASE_URL, TARGET_AUTO_OPEN_URL } from "../../lib/constants";
 
-// --- 👇 [유지] 자동 팝업을 트리거할 타겟 URL 정의 ---
-const TARGET_AUTO_OPEN_URL = "http://172.20.130.91:9110/oceans/BPM_P1002.do?tenId=2000&stgId=TST&pgmNr=BKD_M3201";
-
-// --- 👇 [유지] URL 포함 여부 확인 및 새 창 열기 헬퍼 함수 ---
+// URL 포함 여부 확인 및 새 창 열기 헬퍼 함수
 const checkAndOpenUrl = (text) => {
   if (typeof text === 'string' && text.includes(TARGET_AUTO_OPEN_URL)) {
     if (typeof window !== 'undefined') {
@@ -17,29 +15,28 @@ const checkAndOpenUrl = (text) => {
     }
   }
 };
-// --- 👆 [유지] ---
 
 // responseHandlers는 이 스코프 내에서만 사용되므로 여기에 정의
 const responseHandlers = {
   scenario_list: (data, getFn) => {
-    getFn().addMessage("bot", { text: data.message, scenarios: data.scenarios });
+    getFn().addMessage("bot", { text: data.message, scenarios: data.scenarios, skipSave: true });
   },
   canvas_trigger: (data, getFn) => {
     getFn().addMessage("bot", {
       text:
         locales[getFn().language]?.scenarioStarted(data.scenarioId) ||
         `Starting '${data.scenarioId}'.`,
+      skipSave: true,
     });
     getFn().openScenarioPanel(data.scenarioId);
   },
   toast: (data, getFn) => {
     getFn().showEphemeralToast(data.message, data.toastType || "info");
   },
-  llm_response_with_slots: (data, getFn) => {
-    getFn().addMessage("bot", { text: data.message });
-    // --- 👇 [유지] LLM 응답(slots 포함)에서도 URL 체크 ---
-    checkAndOpenUrl(data.message);
-    // --- 👆 [유지] ---
+  text: (data, getFn) => {
+    const responseText = data.message || data.text || data.content || "(No Content)";
+    getFn().addMessage("bot", { text: responseText, skipSave: true });
+    checkAndOpenUrl(responseText);
     if (data.slots && Object.keys(data.slots).length > 0) {
       getFn().setExtractedSlots(data.slots);
     }
@@ -50,6 +47,7 @@ const responseHandlers = {
         data.message ||
         locales[getFn().language]?.errorUnexpected ||
         "An error occurred.",
+      skipSave: true,
     });
   },
 };
@@ -73,18 +71,27 @@ export async function handleResponse(get, set, messagePayload) {
     llmProvider,
     messages,
     currentConversationId,
+    createNewConversation,
     conversations,
     updateConversationTitle,
-    // --- 👇 [추가] 강제 스크롤 액션 가져오기 ---
-    setForceScrollToBottom, 
-    // --- 👆 [추가] ---
+    setForceScrollToBottom,
   } = get();
+  
+  let conversationId = currentConversationId;
+  if (!conversationId) {
+    conversationId = await createNewConversation(true);
+    if (!conversationId) {
+      console.error("[handleResponse] Failed to create new conversation");
+      showEphemeralToast("Failed to create conversation.", "error");
+      set({ isLoading: false });
+      return;
+    }
+  }
 
   const textForUser = messagePayload.displayText || messagePayload.text;
 
-  // --- 👇 [추가] 사용자가 메시지를 보내면 무조건 맨 아래로 스크롤 강제 이동 ---
+  // 사용자가 메시지를 보내면 무조건 맨 아래로 스크롤 강제 이동
   setForceScrollToBottom(true);
-  // --- 👆 [추가] ---
 
   const defaultTitle = locales[language]?.["newChat"] || "New Conversation";
   const isFirstUserMessage =
@@ -98,10 +105,10 @@ export async function handleResponse(get, set, messagePayload) {
     (!currentConvo || currentConvo.title === defaultTitle);
 
   if (textForUser) {
-    await addMessage("user", { text: textForUser });
+    await addMessage("user", { text: textForUser, skipSave: true });
   }
 
-  const conversationIdForBotResponse = get().currentConversationId;
+  const conversationIdForBotResponse = conversationId;
 
   if (!conversationIdForBotResponse) {
     console.error("[handleResponse] Failed to determine conversationId for bot response.");
@@ -114,10 +121,24 @@ export async function handleResponse(get, set, messagePayload) {
     await updateConversationTitle(conversationIdForBotResponse, newTitle);
   }
 
-  // --- 👇 [유지] 말풍선 표시 여부 결정 (커스텀 액션 등은 숨김) ---
-  const isCustomAction = messagePayload.text === "GET_SCENARIO_LIST"; 
-  const shouldShowBubble = !isCustomAction;
-  // --- 👆 [유지] ---
+  // GET_SCENARIO_LIST 커스텀 액션 처리
+  if (messagePayload.text === "GET_SCENARIO_LIST") {
+    const availableScenarios = get().availableScenarios || {};
+    const scenarioList = Object.entries(availableScenarios).map(([id, title]) => ({
+      id,
+      name: title,
+    }));
+    
+    await addMessage("bot", {
+      text: locales[language]?.["selectScenario"] || "Select a scenario:",
+      scenarios: scenarioList, // 객체 배열로 전달 (ID 포함)
+    });
+    set({ isLoading: false });
+    return;
+  }
+
+  // 말풍선 표시 여부 결정
+  const shouldShowBubble = true;
 
   const thinkingText = locales[language]?.["statusRequesting"] || "Requesting...";
   const tempBotMessageId = `temp_pending_${conversationIdForBotResponse}`;
@@ -129,14 +150,13 @@ export async function handleResponse(get, set, messagePayload) {
     feedback: null,
   };
 
-  // --- 👇 [유지] 조건부로 임시 메시지 및 pending 상태 추가 ---
+  // 조건부로 임시 메시지 및 pending 상태 추가
   if (shouldShowBubble) {
     set((state) => ({
       messages: [...state.messages, tempBotMessage],
       pendingResponses: new Set(state.pendingResponses).add(conversationIdForBotResponse),
     }));
   }
-  // --- 👆 [유지] ---
 
   let lastBotMessageId = tempBotMessageId;
   let finalMessageId = null;
@@ -150,16 +170,18 @@ export async function handleResponse(get, set, messagePayload) {
   }, 5000);
 
   try {
-    const response = await fetch("/api/chat", {
+    let response;
+
+    response = await fetch(`${FASTAPI_BASE_URL}/chat/prediction`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        message: { text: messagePayload.text },
-        scenarioState: null,
-        slots: get().slots,
-        language: language,
-        llmProvider: llmProvider,
-        flowiseApiUrl: get().flowiseApiUrl,
+        usr_id: get().user.uid,
+        ten_id: "1000",
+        stg_id: "DEV",
+        sec_ofc_id: "000025",
+        conversation_id: conversationIdForBotResponse,
+        question: messagePayload.text,
       }),
       signal: controller.signal,
     });
@@ -175,20 +197,13 @@ export async function handleResponse(get, set, messagePayload) {
 
     if (response.headers.get("Content-Type")?.includes("text/event-stream")) {
       isStream = true;
-      console.log("[handleResponse] Processing text/event-stream response.");
+      console.log("[handleResponse] Processing text/event-stream response from /chat/prediction.");
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let streamProcessor;
-
-      if (llmProvider === "gemini")
-        streamProcessor = processGeminiStream(reader, decoder);
-      else if (llmProvider === "flowise")
-        streamProcessor = processFlowiseStream(reader, decoder, language);
-      else
-        throw new Error(
-          `Unsupported LLM provider for streaming: ${llmProvider}`
-        );
+      
+      // processFlowiseStream 사용
+      const streamProcessor = processFlowiseStream(reader, decoder, language);
 
       for await (const result of streamProcessor) {
         if (conversationIdForBotResponse === get().currentConversationId) {
@@ -211,13 +226,12 @@ export async function handleResponse(get, set, messagePayload) {
       const data = await response.json();
       set({ llmRawResponse: data });
 
-      // --- 👇 [유지] 말풍선을 띄웠던 경우에만 제거 시도 ---
+      // 말풍선을 띄웠던 경우에만 제거 시도
       if (shouldShowBubble) {
         set((state) => ({
           messages: state.messages.filter((m) => m.id !== tempBotMessageId),
         }));
       }
-      // --- 👆 [유지] ---
 
       if (data.type === "error") {
         throw new Error(data.message || "API returned an unknown error.");
@@ -237,12 +251,11 @@ export async function handleResponse(get, set, messagePayload) {
       } else {
         const responseText = data.response || data.text || data.message;
         if (responseText) {
-          // --- 👇 [유지] 일반 텍스트 응답에서 URL 체크 ---
+          // 일반 텍스트 응답에서 URL 체크
           checkAndOpenUrl(responseText);
-          // --- 👆 [유지] ---
 
           if (conversationIdForBotResponse === get().currentConversationId) {
-            await addMessage("bot", { text: responseText });
+            await addMessage("bot", { text: responseText, skipSave: true });
           } else {
             const botMessage = {
               id: `temp_${Date.now()}`,
@@ -265,6 +278,7 @@ export async function handleResponse(get, set, messagePayload) {
           );
           await addMessage("bot", {
             text: locales[language]?.["errorUnexpected"] || "(No content)",
+            skipSave: true,
           });
         }
       }
@@ -350,13 +364,12 @@ export async function handleResponse(get, set, messagePayload) {
         }
 
         // 말풍선이 없었다면(shouldShowBubble=false 였거나 제거된 경우) 새로 추가 (에러 메시지 표시)
-        addMessage("bot", { text: errorMessage });
+        addMessage("bot", { text: errorMessage, skipSave: true });
         const newSet = new Set(state.pendingResponses);
         newSet.delete(conversationIdForBotResponse);
         return { isLoading: false, pendingResponses: newSet };
       });
     } else {
-      // ... (다른 대화방 로직 기존 동일)
       const errorBotMessage = {
         id: `temp_${Date.now()}`,
         sender: "bot",
@@ -395,7 +408,6 @@ export async function handleResponse(get, set, messagePayload) {
     }
   } finally {
     if (isStream) {
-        // ... (스트림 종료 로직 기존 동일)
       const isStillOnSameConversation =
         conversationIdForBotResponse === get().currentConversationId;
 
@@ -410,7 +422,6 @@ export async function handleResponse(get, set, messagePayload) {
               lastMessage.id === finalMessageId) &&
             lastMessage.isStreaming
           ) {
-            // ... (스트림 최종 저장 로직)
              const finalText =
               (llmProvider === "flowise" ? finalStreamText : lastMessage.text) ||
               "";
@@ -421,9 +432,7 @@ export async function handleResponse(get, set, messagePayload) {
                   "(Response failed. Please try again later.)"
                 : finalText;
             
-            // --- 👇 [유지] 스트리밍 완료 후 최종 텍스트에서 URL 체크 ---
             checkAndOpenUrl(finalMessageText);
-            // --- 👆 [유지] ---
 
             const finalMessage = {
               ...lastMessage,
@@ -434,12 +443,10 @@ export async function handleResponse(get, set, messagePayload) {
 
              saveMessage(finalMessage, conversationIdForBotResponse).then(
               (savedId) => {
-                // ...
                  finalMessageId = savedId;
                 set((s) => {
                   const newSet = new Set(s.pendingResponses);
                   newSet.delete(conversationIdForBotResponse);
-                  // ...
                   return {
                     messages: s.messages.map((m) => m.id === lastMessage.id ? {...finalMessage, id: savedId} : m), // Simplified
                     isLoading: false,
@@ -461,22 +468,15 @@ export async function handleResponse(get, set, messagePayload) {
           return {};
         });
       } else {
-          // ... (스위칭 로직)
          set((state) => {
-             // ...
              if (finalStreamText) {
-                 // ... saveMessage ...
-                 // --- 👇 [유지] 다른 대화방에 있어도 스트리밍 완료 시 URL 체크 ---
                  checkAndOpenUrl(finalStreamText);
-                 // --- 👆 [유지] ---
              }
              const newSet = new Set(state.pendingResponses);
             newSet.delete(conversationIdForBotResponse);
-             // ...
             return {
                 isLoading: false,
                 pendingResponses: newSet,
-                // ...
             };
          });
       }

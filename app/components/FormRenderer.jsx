@@ -2,8 +2,6 @@
 "use client";
 
 import { useCallback, useRef, useEffect, useState } from "react";
-// --- 👇 [수정] XLSX 라이브러리와 헬퍼 함수를 excelUtils에서 임포트 ---
-import { XLSX, convertExcelDate } from "../lib/excelUtils";
 // --- 👆 [수정] ---
 import { useTranslations } from "../hooks/useTranslations";
 import styles from "./Chat.module.css";
@@ -164,80 +162,6 @@ const FormRenderer = ({
       handleInputChange(el.name, interpolatedValue);
     }
   };
-
-  const handleExcelUploadClick = (e) => {
-    e.stopPropagation();
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e) => {
-    // (Excel 파싱 로직 - 기존과 동일)
-    e.stopPropagation();
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = event.target.result;
-        const workbook = XLSX.read(data, { type: "array" });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 0 });
-
-        if (!jsonData || jsonData.length === 0) {
-          alert("Excel file is empty or has no data rows.");
-          return;
-        }
-        const labelToNameMap = new Map();
-        node.data.elements?.forEach((el) => {
-          if (el.label && el.name) {
-            const interpolatedLabel = interpolateMessage(el.label, slots);
-            labelToNameMap.set(interpolatedLabel.toLowerCase().trim(), el);
-          }
-        });
-        const firstRow = jsonData[0];
-        const newData = {};
-        for (const excelHeader in firstRow) {
-          if (Object.hasOwnProperty.call(firstRow, excelHeader)) {
-            const formElement = labelToNameMap.get(
-              excelHeader.toLowerCase().trim()
-            );
-            if (formElement) {
-              const formName = formElement.name;
-              let excelValue = firstRow[excelHeader];
-              if (
-                formElement.type === "date" &&
-                typeof excelValue === "number"
-              ) {
-                const formattedDate = convertExcelDate(excelValue);
-                if (formattedDate) {
-                  newData[formName] = formattedDate;
-                } else {
-                  newData[formName] = String(excelValue);
-                }
-              } else {
-                newData[formName] = String(excelValue ?? "");
-              }
-            }
-          }
-        }
-        if (Object.keys(newData).length > 0) {
-          setFormData((prev) => ({ ...prev, ...newData }));
-          alert("Excel data loaded successfully.");
-        } else {
-          alert("No matching columns found between Excel and the form.");
-        }
-      } catch (error) {
-        console.error("Error parsing Excel file:", error);
-        alert("Failed to read or parse the Excel file.");
-      } finally {
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  };
   
   // --- 그리드 클릭 핸들러 (Deep Path 클리어 로직 강화) ---
   const handleGridRowClick = (gridElement, rowData) => {
@@ -374,7 +298,7 @@ const FormRenderer = ({
     const renderedElements = [];
     let i = 0;
     const elements = node.data.elements || [];
-    // 💡 [수정] 'search'도 simple input 그룹에 포함
+    // 💡 [수정] 'search'도 simple input 그룹에 포함 (checkbox는 제외 - 복합 요소)
     const isSimpleInput = (el) =>
       el &&
       (el.type === "input" || el.type === "date" || el.type === "dropbox" || el.type === "search");
@@ -707,6 +631,7 @@ const FormRenderer = ({
                           display: "flex",
                           alignItems: "center",
                           gap: "8px",
+                          marginLeft: "0px",
                         }}
                       >
                         <input
@@ -740,14 +665,6 @@ const FormRenderer = ({
 
   return (
     <form onSubmit={handleSubmit} className={styles.formContainer}>
-      <input
-        type="file"
-        ref={fileInputRef}
-        className={styles.formFileInput}
-        accept=".xlsx, .xls, .csv"
-        onChange={handleFileChange}
-        onClick={(e) => e.stopPropagation()}
-      />
 
       <div className={styles.formHeader}>
         <LogoIcon className={styles.avatar} />
@@ -759,16 +676,6 @@ const FormRenderer = ({
 
       {!hasSlotBoundGrid && !disabled && (
         <div className={styles.formActionArea}>
-          {node.data.enableExcelUpload && (
-            <button
-              type="button"
-              className={styles.excelUploadButton}
-              onClick={handleExcelUploadClick}
-              disabled={disabled}
-            >
-              Excel Upload
-            </button>
-          )}
           <button
             type="submit"
             className={styles.formSubmitButton}

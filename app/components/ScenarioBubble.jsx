@@ -13,47 +13,132 @@ import ArrowDropDownIcon from "./icons/ArrowDropDownIcon";
 import CheckCircle from "./icons/CheckCircle";
 import OpenInNewIcon from "./icons/OpenInNew";
 import ChevronDownIcon from "./icons/ChevronDownIcon";
-// --- 👇 [추가] 추출된 컴포넌트 임포트 ---
 import FormRenderer from "./FormRenderer";
 import ScenarioStatusBadge from "./ScenarioStatusBadge";
-// --- 👆 [추가] ---
-
-// --- 👇 [제거] 엑셀 날짜 변환 헬퍼 (FormRenderer.jsx로 이동) ---
-// function convertExcelDate(serial) { ... }
-// --- 👆 [제거] ---
-
-// --- 👇 [제거] FormRenderer 컴포넌트 (FormRenderer.jsx로 이동) ---
-// const FormRenderer = ({ ... }) => { ... };
-// --- 👆 [제거] ---
-
-// --- 👇 [제거] ScenarioStatusBadge 컴포넌트 (ScenarioStatusBadge.jsx로 이동) ---
-// const ScenarioStatusBadge = ({ ... }) => { ... };
-// --- 👆 [제거] ---
 
 // ScenarioBubble 컴포넌트 본체
-export default function ScenarioBubble({ scenarioSessionId }) {
-  const {
-    scenarioStates,
-    endScenario,
-    setActivePanel,
-    activePanel,
-    activeScenarioSessionId: focusedSessionId,
-    dimUnfocusedPanels,
-  } = useChatStore();
+export default function ScenarioBubble({ scenarioSessionId, messageData }) {
+  // ✅ [최적화] selector를 사용하여 특정 시나리오 상태만 구독
+  // 다른 시나리오의 상태 변경 시 이 컴포넌트는 리렌더링되지 않음
+  const activeScenario = useChatStore(
+    (state) => scenarioSessionId ? state.scenarioStates[scenarioSessionId] : null,
+    (prev, next) => {
+      // 깊은 비교를 위한 커스텀 비교 함수
+      if (prev === next) return true;
+      if (!prev || !next) return prev === next;
+      // messages, status, slots, title 비교
+      return (
+        prev.messages?.length === next.messages?.length &&
+        prev.status === next.status &&
+        JSON.stringify(prev.slots) === JSON.stringify(next.slots) &&
+        prev.title === next.title
+      );
+    }
+  );
+  
+  const endScenario = useChatStore((state) => state.endScenario);
+  const setActivePanel = useChatStore((state) => state.setActivePanel);
+  const activePanel = useChatStore((state) => state.activePanel);
+  const focusedSessionId = useChatStore((state) => state.activeScenarioSessionId);
+  const dimUnfocusedPanels = useChatStore((state) => state.dimUnfocusedPanels);
+  const openScenarioPanel = useChatStore((state) => state.openScenarioPanel);
   const { t } = useTranslations(); // language 제거
-
-  const activeScenario = scenarioSessionId
-    ? scenarioStates[scenarioSessionId]
-    : null;
+  
   const isCompleted =
     activeScenario?.status === "completed" ||
     activeScenario?.status === "failed" ||
     activeScenario?.status === "canceled";
-  const scenarioId = activeScenario?.scenarioId;
+  const scenarioTitle = activeScenario?.title || messageData?.text || "Scenario"; 
+  const scenarioBody = activeScenario?.messages?.[0]?.text || activeScenario?.messages?.[0]?.node?.data?.content || messageData?.text || "";  // ✅ body content 가져오기
   const isFocused =
     activePanel === "scenario" && focusedSessionId === scenarioSessionId;
 
-  if (!activeScenario) {
+  // ✅ activeScenario가 없으면 로딩 상태로 표시 (시나리오 세션 아직 로드 안 됨)
+  if (!activeScenario && scenarioSessionId) {
+    // ✅ 클릭 시 패널 열기
+    const handleLoadClick = async (e) => {
+      e.stopPropagation();
+      // 이미 생성된 시나리오 세션을 활성화하고 데이터 로드
+      const store = useChatStore.getState();
+      await store.subscribeToScenarioSession(scenarioSessionId);
+      setActivePanel("scenario", scenarioSessionId);
+    };
+    
+    return (
+      <div
+        className={`${styles.messageRow} ${styles.userRow}`}
+        style={{ cursor: "pointer" }}
+        onClick={handleLoadClick}
+      >
+        <div className={`GlassEffect ${styles.scenarioBubbleContainer}`}>
+          <div className={styles.header}>
+            <div className={styles.headerContent}>
+              {/* 🔴 [NEW] 로딩 중 상태 배지 표시 */}
+              <ScenarioStatusBadge
+                status="generating"
+                t={t}
+                isSelected={false}
+                styles={styles}
+              />
+              <span className={styles.scenarioHeaderTitle}>
+                {t("scenarioTitle")(messageData?.text || "Scenario")}
+              </span>
+            </div>
+            <div className={styles.headerButtons}>
+              <div style={{ rotate: "270deg" }}>
+                <ChevronDownIcon />
+              </div>
+            </div>
+          </div>
+          {/* ✅ messageData.text 표시 */}
+          {messageData?.text && (
+            <div className={styles.messageContent}>
+              <p>{messageData.text}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ scenarioSessionId가 없지만 messageData가 있으면 (백엔드에서 아직 전달 안 된 상태)
+  if (!activeScenario && !scenarioSessionId && messageData?.type === "scenario_bubble") {
+    return (
+      <div
+        className={`${styles.messageRow} ${styles.userRow}`}
+        style={{ cursor: "pointer" }}
+      >
+        <div className={`GlassEffect ${styles.scenarioBubbleContainer}`}>
+          <div className={styles.header}>
+            <div className={styles.headerContent}>
+              {/* 🔴 [NEW] 아직 sessionId가 없을 때 대기 상태 배지 표시 */}
+              <ScenarioStatusBadge
+                status="generating"
+                t={t}
+                isSelected={false}
+                styles={styles}
+              />
+              <span className={styles.scenarioHeaderTitle}>
+                {t("scenarioTitle")(messageData?.text || "Scenario")}
+              </span>
+            </div>
+            <div className={styles.headerButtons}>
+              <div style={{ rotate: "270deg" }}>
+                <ChevronDownIcon />
+              </div>
+            </div>
+          </div>
+          {messageData?.text && (
+            <div className={styles.messageContent}>
+              <p>{messageData.text}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (!activeScenario && !scenarioSessionId) {
     return null;
   }
 
@@ -85,7 +170,11 @@ export default function ScenarioBubble({ scenarioSessionId }) {
     }
 
     e.stopPropagation();
-    setActivePanel("scenario", scenarioSessionId);
+    
+    // ✅ scenarioSessionId가 있으면 직접 활성화
+    if (scenarioSessionId) {
+      setActivePanel("scenario", scenarioSessionId);
+    }
   };
 
   return (
@@ -116,10 +205,7 @@ export default function ScenarioBubble({ scenarioSessionId }) {
 
             <span className={styles.scenarioHeaderTitle}>
               {t("scenarioTitle")(
-                interpolateMessage(
-                  scenarioId || "Scenario",
-                  activeScenario?.slots
-                )
+                interpolateMessage(scenarioTitle, activeScenario?.slots)
               )}
             </span>
           </div>
@@ -129,6 +215,12 @@ export default function ScenarioBubble({ scenarioSessionId }) {
             </div>
           </div>
         </div>
+        {/* ✅ Body content 표시 */}
+        {scenarioBody && (
+          <div className={styles.messageContent}>
+            <p>{scenarioBody}</p>
+          </div>
+        )}
       </div>
     </div>
   );

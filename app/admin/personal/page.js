@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { useChatStore } from "../../store";
+import { logger } from "../../lib/logger";
 import styles from "../general/page.module.css"; // general의 CSS 재사용
 import Link from "next/link";
 import { useTranslations } from "../../hooks/useTranslations";
@@ -15,8 +16,9 @@ export default function PersonalSettingsPage() {
     contentTruncateLimit,
     fontSizeDefault,
     isDevMode, 
-    // --- 👇 [추가] ---
     sendTextShortcutImmediately, 
+    // --- 👇 [추가] ---
+    useFastApi, 
     // --- 👆 [추가] ---
     savePersonalSettings, 
     showEphemeralToast,
@@ -33,8 +35,9 @@ export default function PersonalSettingsPage() {
   const [truncateLimit, setTruncateLimit] = useState("");
   const [defaultSize, setDefaultSize] = useState("");
   const [devMode, setDevMode] = useState(false); 
-  // --- 👇 [추가] 로컬 상태 ---
   const [textShortcutAutoSend, setTextShortcutAutoSend] = useState(false); 
+  // --- 👇 [추가] 로컬 상태 ---
+  const [fastApiEnabled, setFastApiEnabled] = useState(false); 
   // --- 👆 [추가] ---
   const [isLoading, setIsLoading] = useState(false);
 
@@ -46,8 +49,9 @@ export default function PersonalSettingsPage() {
       setTruncateLimit(String(contentTruncateLimit));
     if (fontSizeDefault) setDefaultSize(fontSizeDefault);
     setDevMode(isDevMode); 
-    // --- 👇 [추가] ---
     setTextShortcutAutoSend(sendTextShortcutImmediately);
+    // --- 👇 [추가] ---
+    setFastApiEnabled(useFastApi);
     // --- 👆 [추가] ---
   }, [
     hideCompletedScenarios,
@@ -55,8 +59,9 @@ export default function PersonalSettingsPage() {
     contentTruncateLimit,
     fontSizeDefault,
     isDevMode, 
-    // --- 👇 [추가] ---
     sendTextShortcutImmediately,
+    // --- 👇 [추가] ---
+    useFastApi,
     // --- 👆 [추가] ---
   ]);
 
@@ -83,8 +88,9 @@ export default function PersonalSettingsPage() {
       fontSizeDefault: defaultSize,
       contentTruncateLimit: newTruncateLimit,
       isDevMode: devMode, 
-      // --- 👇 [추가] ---
       sendTextShortcutImmediately: textShortcutAutoSend,
+      // --- 👇 [추가] ---
+      useFastApi: fastApiEnabled,
       // --- 👆 [추가] ---
     };
 
@@ -156,7 +162,7 @@ export default function PersonalSettingsPage() {
           </label>
         </div>
 
-        {/* --- 👇 [추가] 텍스트 숏컷 즉시 전송 설정 --- */}
+        {/* 텍스트 숏컷 즉시 전송 설정 */}
         <div className={styles.settingItem}>
           <label className={styles.settingLabel}>
             <h3>텍스트 숏컷 즉시 전송</h3>
@@ -173,7 +179,6 @@ export default function PersonalSettingsPage() {
             <span className={styles.slider}></span>
           </label>
         </div>
-        {/* --- 👆 [추가] --- */}
 
         {/* 본문 줄임 줄 수 */}
         <div className={styles.settingItem}>
@@ -192,69 +197,6 @@ export default function PersonalSettingsPage() {
             className={styles.settingInput}
             min="0"
           />
-        </div>
-
-        {/* 완료된 시나리오 숨김 설정 */}
-        <div
-          className={`${styles.settingGroup} ${
-            hideCompleted ? styles.active : ""
-          }`}
-        >
-          <div className={styles.settingItem}>
-            <label className={styles.settingLabel}>
-              <h3>완료된 시나리오 숨김</h3>
-              <p>
-                대화 목록의 하위 메뉴에서 '완료' 상태인 시나리오를 숨깁니다.
-              </p>
-            </label>
-            <label className={styles.switch}>
-              <input
-                type="checkbox"
-                checked={hideCompleted}
-                onChange={(e) => setHideCompleted(e.target.checked)}
-              />
-              <span className={styles.slider}></span>
-            </label>
-          </div>
-          {hideCompleted && (
-            <div className={`${styles.settingItem} ${styles.subSettingItem}`}>
-              <label htmlFor="hide-delay" className={styles.settingLabel}>
-                <h4>숨김 지연 시간 (시간)</h4>
-                <p>
-                  완료된 시점을 기준으로, 설정된 시간 이후에 목록에서 숨깁니다.
-                  (0으로 설정 시 즉시 숨김)
-                </p>
-              </label>
-              <input
-                id="hide-delay"
-                type="number"
-                value={delayHours}
-                onChange={(e) => setDelayHours(e.target.value)}
-                className={styles.settingInput}
-                min="0"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* 폰트 크기 설정 */}
-        <div className={styles.settingGroup}>
-          <div className={styles.settingItem}>
-            <label htmlFor="font-size-default" className={styles.settingLabel}>
-              <h3>폰트 크기</h3>
-              <p>
-                'Large text' 모드 ON/OFF와 관계없이 적용될 폰트 크기입니다. (예: 16px,
-                1rem)
-              </p>
-            </label>
-            <input
-              id="font-size-default"
-              type="text"
-              value={defaultSize}
-              onChange={(e) => setDefaultSize(e.target.value)}
-              className={styles.settingInput}
-            />
-          </div>
         </div>
 
         {/* 저장 버튼 */}
